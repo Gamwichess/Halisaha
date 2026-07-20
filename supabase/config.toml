@@ -1,0 +1,11 @@
+
+[functions.toonify-avatar]
+enabled = true
+verify_jwt = false
+import_map = "./functions/toonify-avatar/deno.json"
+entrypoint = "./functions/toonify-avatar/index.ts"
+
+[functions.send-notification]
+enabled = true
+verify_jwt = false
+entrypoint = "./functions/send-notification/index.ts"

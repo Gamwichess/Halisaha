@@ -1,0 +1,194 @@
+
+<style>
+  .section { margin: 0 0 1.5rem; }
+  .section-title { font-size: 13px; font-weight: 500; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.06em; margin: 0 0 10px; }
+  .cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 10px; }
+  .card { background: var(--surface-2); border: 0.5px solid var(--border); border-radius: 12px; padding: 14px 16px; }
+  .card.accent { border-color: var(--border-accent); }
+  .card-header { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; }
+  .role-badge { font-size: 11px; font-weight: 500; padding: 3px 8px; border-radius: 4px; }
+  .badge-kaptan { background: var(--bg-warning); color: var(--text-warning); }
+  .badge-yetkili { background: var(--bg-accent); color: var(--text-accent); }
+  .badge-oyuncu { background: var(--bg-success); color: var(--text-success); }
+  .badge-misafir { background: var(--surface-1); color: var(--text-secondary); border: 0.5px solid var(--border); }
+  .card h3 { font-size: 15px; font-weight: 500; margin: 0; color: var(--text-primary); }
+  .card p { font-size: 13px; color: var(--text-secondary); margin: 6px 0 0; line-height: 1.5; }
+  .perm-list { margin: 8px 0 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: 4px; }
+  .perm-list li { font-size: 12px; color: var(--text-secondary); display: flex; align-items: center; gap: 6px; }
+  .perm-list li i { font-size: 13px; color: var(--text-success); }
+  .perm-list li.no i { color: var(--text-muted); }
+  .feature-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 10px; }
+  .feature-card { background: var(--surface-1); border-radius: 10px; padding: 12px 14px; display: flex; gap: 10px; align-items: flex-start; }
+  .feat-icon { font-size: 18px; color: var(--text-accent); flex-shrink: 0; margin-top: 1px; }
+  .feat-body h4 { font-size: 13px; font-weight: 500; margin: 0 0 3px; color: var(--text-primary); }
+  .feat-body p { font-size: 12px; color: var(--text-secondary); margin: 0; line-height: 1.5; }
+  .divider { height: 0.5px; background: var(--border); margin: 0 0 1.5rem; }
+  .flow-row { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; margin: 0 0 1rem; }
+  .flow-box { background: var(--surface-2); border: 0.5px solid var(--border-strong); border-radius: 8px; padding: 8px 12px; font-size: 13px; font-weight: 500; color: var(--text-primary); }
+  .flow-arrow { color: var(--text-muted); font-size: 16px; }
+  .tag-row { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+  .tag { font-size: 11px; padding: 3px 8px; border-radius: 4px; background: var(--surface-1); border: 0.5px solid var(--border); color: var(--text-secondary); }
+  .try-btn { margin-top: 10px; font-size: 12px; padding: 5px 12px; border-radius: 6px; border: 0.5px solid var(--border-strong); background: transparent; color: var(--text-accent); cursor: pointer; }
+  .try-btn:hover { background: var(--bg-accent); }
+</style>
+
+<div style="padding: 1rem 0">
+
+<div class="section">
+  <div class="section-title">Rol hiyerarşisi</div>
+  <div class="cards">
+    <div class="card accent">
+      <div class="card-header">
+        <span class="role-badge badge-kaptan">Kaptan</span>
+      </div>
+      <h3><i class="ti ti-crown" aria-hidden="true"></i> Takım kaptanı</h3>
+      <p>Takım üzerinde tam kontrol. Tek kişi olabilir, devredebilir.</p>
+      <ul class="perm-list">
+        <li><i class="ti ti-check"></i> Üye ekle / çıkar</li>
+        <li><i class="ti ti-check"></i> Rol ata / değiştir</li>
+        <li><i class="ti ti-check"></i> Maç oluştur / iptal et</li>
+        <li><i class="ti ti-check"></i> Davet kodu yönet</li>
+        <li><i class="ti ti-check"></i> Takımı sil</li>
+      </ul>
+    </div>
+    <div class="card">
+      <div class="card-header">
+        <span class="role-badge badge-yetkili">Yetkili</span>
+      </div>
+      <h3><i class="ti ti-shield-check" aria-hidden="true"></i> Yardımcı kaptan</h3>
+      <p>Operasyonel yetki, kritik kararlar kaptana ait.</p>
+      <ul class="perm-list">
+        <li><i class="ti ti-check"></i> Maç oluştur</li>
+        <li><i class="ti ti-check"></i> Anket başlat</li>
+        <li><i class="ti ti-check"></i> Üye davet et</li>
+        <li class="no"><i class="ti ti-x"></i> Rol değiştiremez</li>
+        <li class="no"><i class="ti ti-x"></i> Takımı silemez</li>
+      </ul>
+    </div>
+    <div class="card">
+      <div class="card-header">
+        <span class="role-badge badge-oyuncu">Oyuncu</span>
+      </div>
+      <h3><i class="ti ti-user" aria-hidden="true"></i> Standart oyuncu</h3>
+      <p>Mevcut davranış. Katıl, oy ver, istatistik gör.</p>
+      <ul class="perm-list">
+        <li><i class="ti ti-check"></i> Maça katıl / ayrıl</li>
+        <li><i class="ti ti-check"></i> Ankete oy ver</li>
+        <li><i class="ti ti-check"></i> Kadroyu gör</li>
+        <li class="no"><i class="ti ti-x"></i> Maç oluşturamaz</li>
+        <li class="no"><i class="ti ti-x"></i> Üye yönetemez</li>
+      </ul>
+    </div>
+    <div class="card">
+      <div class="card-header">
+        <span class="role-badge badge-misafir">Misafir</span>
+      </div>
+      <h3><i class="ti ti-user-question" aria-hidden="true"></i> Joker / misafir</h3>
+      <p>Sadece o maça özel. Profil ve stat takibi yok.</p>
+      <ul class="perm-list">
+        <li><i class="ti ti-check"></i> O maça katılır</li>
+        <li><i class="ti ti-check"></i> Kadroyu gör</li>
+        <li class="no"><i class="ti ti-x"></i> Oy kullanamaz</li>
+        <li class="no"><i class="ti ti-x"></i> Stat biriktirmez</li>
+        <li class="no"><i class="ti ti-x"></i> Mesaj gönderemez</li>
+      </ul>
+    </div>
+  </div>
+</div>
+
+<div class="divider"></div>
+
+<div class="section">
+  <div class="section-title">Kaptan devri akışı</div>
+  <div class="flow-row">
+    <div class="flow-box"><i class="ti ti-crown" aria-hidden="true"></i> Kaptan</div>
+    <span class="flow-arrow">→</span>
+    <div class="flow-box">Üyeye dokunur</div>
+    <span class="flow-arrow">→</span>
+    <div class="flow-box">"Kaptanlığı devret"</div>
+    <span class="flow-arrow">→</span>
+    <div class="flow-box">Onay ekranı</div>
+    <span class="flow-arrow">→</span>
+    <div class="flow-box">Eski kaptan → Oyuncu olur</div>
+  </div>
+  <p style="font-size: 13px; color: var(--text-secondary); margin: 0;">Kaptan takımdan ayrılırsa sistem en kıdemli "Yetkili"yi otomatik kaptan yapar. Yetkili yoksa en eski üyeyi seçer.</p>
+</div>
+
+<div class="divider"></div>
+
+<div class="section">
+  <div class="section-title">Önerilen yeni özellikler</div>
+  <div class="feature-grid">
+    <div class="feature-card">
+      <i class="ti ti-users-group feat-icon" aria-hidden="true"></i>
+      <div class="feat-body">
+        <h4>Takım profil sayfası</h4>
+        <p>Logo, renk, takım adı ve sezon istatistikleri tek ekranda</p>
+      </div>
+    </div>
+    <div class="feature-card">
+      <i class="ti ti-bell feat-icon" aria-hidden="true"></i>
+      <div class="feat-body">
+        <h4>Rol değişiklik bildirimi</h4>
+        <p>"Yardımcı kaptan yapıldın" push bildirimi</p>
+      </div>
+    </div>
+    <div class="feature-card">
+      <i class="ti ti-history feat-icon" aria-hidden="true"></i>
+      <div class="feat-body">
+        <h4>Eylem geçmişi</h4>
+        <p>Kimin ne zaman üye eklediği / maç oluşturduğu logu</p>
+      </div>
+    </div>
+    <div class="feature-card">
+      <i class="ti ti-lock feat-icon" aria-hidden="true"></i>
+      <div class="feat-body">
+        <h4>Takım gizliliği</h4>
+        <p>Açık / davet-only / gizli mod. Listelerde görünme ayarı</p>
+      </div>
+    </div>
+    <div class="feature-card">
+      <i class="ti ti-chart-bar feat-icon" aria-hidden="true"></i>
+      <div class="feat-body">
+        <h4>Üye sıralaması</h4>
+        <p>Takım içi MVP, gol / asist / katılım puanı tablosu</p>
+      </div>
+    </div>
+    <div class="feature-card">
+      <i class="ti ti-player-play feat-icon" aria-hidden="true"></i>
+      <div class="feat-body">
+        <h4>Maç onay akışı</h4>
+        <p>Yetkili oluşturur, kaptan onaylar — iki aşamalı doğrulama</p>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="divider"></div>
+
+<div class="section">
+  <div class="section-title">Uygulama öncelik sırası</div>
+  <div class="flow-row">
+    <div class="flow-box" style="border-color: var(--border-danger); color: var(--text-danger);">1 · Rol sütunu</div>
+    <span class="flow-arrow">→</span>
+    <div class="flow-box" style="border-color: var(--border-warning); color: var(--text-warning);">2 · Yetki kontrolleri</div>
+    <span class="flow-arrow">→</span>
+    <div class="flow-box" style="border-color: var(--border-accent); color: var(--text-accent);">3 · Kaptan devri</div>
+    <span class="flow-arrow">→</span>
+    <div class="flow-box">4 · Bildirimler</div>
+    <span class="flow-arrow">→</span>
+    <div class="flow-box">5 · Gelişmiş özellikler</div>
+  </div>
+  <div class="tag-row">
+    <span class="tag">teams tablosuna role sütunu</span>
+    <span class="tag">team_members.role: captain | deputy | player | guest</span>
+    <span class="tag">RLS politikaları role göre</span>
+    <span class="tag">UI'da üyeye uzun basınca rol menüsü</span>
+  </div>
+</div>
+
+<button class="try-btn" onclick="sendPrompt('Takımım sayfasına rol sistemi ekle: captain, deputy, player rolleri, Supabase schema değişiklikleri ve React Native UI ile')">
+  Kodlamaya geç ↗
+</button>
+
+</div>
