@@ -140,50 +140,72 @@ const SKILL_POSITIONS: { code: SkillPosition; label: string }[] = [
 const SKILL_POSITION_LABELS: Record<SkillPosition, string> =
   Object.fromEntries(SKILL_POSITIONS.map(p => [p.code, p.label])) as Record<SkillPosition, string>;
 
-// Her oyuncuda gösterilen ortak nitelikler (mevkiden bağımsız)
-const COMMON_ATTRIBUTES = ['Kondisyon', 'Hız', 'Top Kontrolü', 'Fiziksel Güç'];
+// ── NİTELİK SİSTEMİ (sadeleştirilmiş) ────────────────────────────────────────
+// Saha oyuncularının HEPSİ aynı 6 niteliğe sahiptir; mevkiye göre fark yalnızca
+// OVR AĞIRLIĞINDADIR (defansın şutu da girilir/oylanır ama OVR'ına az katkı
+// yapar, forvetin şutu çok katkı yapar). Kaleci kendi 6 niteliğine sahiptir.
+// "Kondisyon" bu 6'nın DIŞINDA, özel bir niteliktir: form/oylamada AYRI
+// gösterilir ve OVR'a ağırlık olarak değil ÇARPAN olarak girer (bkz.
+// conditionFactor + computeOverall).
+const OUTFIELD_ATTRIBUTES   = ['Şut', 'Pas', 'Top Kontrolü', 'Markaj', 'Hız', 'Fiziksel Güç'];
+// Kalecilik nitelikleri — kaleci mevkili oyuncular + o maçta played_as_goalkeeper
+// işaretli saha oyuncuları için oylama setine eklenir.
+const GOALKEEPER_ATTRIBUTES = ['Uzanış', 'Tutuş', 'Dağıtım', 'Refleks', 'Hız', 'Pozisyon'];
+const CONDITION_ATTR = 'Kondisyon';
 
-// Mevkiye özgü nitelikler — form, ortak + ana mevki + ikincil mevki
-// niteliklerinin (tekrarsız) birleşiminden üretilir
-const POSITION_ATTRIBUTES: Record<SkillPosition, string[]> = {
-  KALECI:        ['Refleks', 'Kurtarış', 'Çıkış', 'Dağıtım'],
-  DEFANS:        ['Markaj', 'Top Kapma', 'Kafa Topu', 'Pozisyon Alma'],
-  ON_LIBERO:     ['Top Kapma', 'Pas', 'Oyun Kurma', 'Pozisyon Alma'],
-  ORTA_SAHA:     ['Pas', 'Top Sürme', 'Enerji'],
-  FORVET_ARKASI: ['Son Pas', 'Bitiricilik'],
-  FORVET:        ['Bitiricilik', 'Şut Gücü', 'Top Taşıma'],
+// Ana mevkiye göre BECERİ niteliği seti (Kondisyon HARİÇ).
+function skillAttributesFor(primary: SkillPosition | ''): string[] {
+  return primary === 'KALECI' ? GOALKEEPER_ATTRIBUTES : OUTFIELD_ATTRIBUTES;
+}
+
+// Eski (sadeleştirme öncesi) nitelik adlarını yenilerine eşler — mevcut
+// oyuncuların OVR'ı sıfırlanmasın diye okuma anında uygulanır. Çoğu ad zaten
+// aynı (Pas, Markaj, Hız, Fiziksel Güç, Top Kontrolü, Kondisyon); yalnızca
+// birkaç yeniden adlandırma var. Eşlenmeyen eski nitelikler (Kafa Topu, Enerji…)
+// düşer, gerçekten yeni olanlar (Uzanış…) girilene kadar 60 sayılır.
+const ATTR_RENAMES: Record<string, string> = {
+  'Şut Gücü':      'Şut',
+  Kurtarış:        'Tutuş',
+  'Pozisyon Alma': 'Pozisyon',
 };
+function migrateAttributeNames(attributes: Record<string, any> | null | undefined): Record<string, number> {
+  const src = attributes || {};
+  const out: Record<string, number> = {};
+  for (const [k, v] of Object.entries(src)) {
+    const nk = ATTR_RENAMES[k] || k;
+    const num = Number(v);
+    if (Number.isFinite(num) && out[nk] === undefined) out[nk] = num;
+  }
+  return out;
+}
 
-// Mevkiye göre nitelik AĞIRLIKLARI — OVR (overall_rating) bu tablodan,
-// oyuncunun ANA mevkisine (primary_position) göre ağırlıklı ortalama ile
-// hesaplanır. Ağırlıklar relatif (1–5); kod Σ(değer×ağırlık)/Σağırlık ile
-// 0–99 aralığına normalize eder. Bir mevkinin önemsemediği (yalnız ikincil
-// mevkiden gelen) nitelikler OVR'a girmez — FIFA mantığı. İlk sürüm makul
-// varsayılanlar; ince ayar sonradan yapılır.
+// Mevkiye göre nitelik AĞIRLIKLARI — OVR (overall_rating) bu tablodan
+// ağırlıklı ortalama ile hesaplanır. Ağırlıklar relatif (1–5); kod
+// Σ(değer×ağırlık)/Σağırlık ile 0–99'a normalize eder. İkincil mevki bu
+// ağırlıklara SECONDARY_WEIGHT_FACTOR katsayısıyla harmanlanır (bkz.
+// computeOverall) — Defans+Forvet oyuncusunun şutu, saf Defans'a göre OVR'ına
+// daha çok yansır. İlk sürüm makul varsayılanlar; ince ayar sonradan.
+const SECONDARY_WEIGHT_FACTOR = 0.5;
 const POSITION_WEIGHTS: Record<SkillPosition, Record<string, number>> = {
+  // Kaleci — kendi 6'sı üzerinden.
   KALECI: {
-    Refleks: 5, Kurtarış: 5, Çıkış: 3, Dağıtım: 3,
-    'Fiziksel Güç': 2, Hız: 1, Kondisyon: 1, 'Top Kontrolü': 1,
+    Refleks: 5, Tutuş: 5, Uzanış: 4, Pozisyon: 4, Dağıtım: 3, Hız: 1,
   },
+  // Saha mevkileri — [Şut, Pas, Top Kontrolü, Markaj, Hız, Fiziksel Güç] üzerinden.
   DEFANS: {
-    Markaj: 5, 'Top Kapma': 4, 'Pozisyon Alma': 4, 'Kafa Topu': 3,
-    'Fiziksel Güç': 3, Hız: 2, Kondisyon: 2, 'Top Kontrolü': 1,
+    Markaj: 5, 'Fiziksel Güç': 4, Hız: 3, 'Top Kontrolü': 2, Pas: 2, Şut: 1,
   },
   ON_LIBERO: {
-    'Oyun Kurma': 4, Pas: 4, 'Top Kapma': 4, 'Pozisyon Alma': 3,
-    Kondisyon: 3, 'Top Kontrolü': 3, Hız: 2, 'Fiziksel Güç': 2,
+    Pas: 5, Markaj: 4, 'Top Kontrolü': 3, 'Fiziksel Güç': 3, Hız: 2, Şut: 2,
   },
   ORTA_SAHA: {
-    Pas: 5, Enerji: 4, 'Top Sürme': 3,
-    Kondisyon: 3, 'Top Kontrolü': 3, Hız: 2, 'Fiziksel Güç': 2,
+    Pas: 5, 'Top Kontrolü': 4, Hız: 3, Şut: 3, Markaj: 2, 'Fiziksel Güç': 2,
   },
   FORVET_ARKASI: {
-    'Son Pas': 5, Bitiricilik: 4,
-    'Top Kontrolü': 3, Hız: 3, Kondisyon: 2, 'Fiziksel Güç': 1,
+    Şut: 4, Pas: 4, 'Top Kontrolü': 4, Hız: 3, 'Fiziksel Güç': 2, Markaj: 1,
   },
   FORVET: {
-    Bitiricilik: 5, 'Şut Gücü': 5, 'Top Taşıma': 3,
-    Hız: 3, 'Fiziksel Güç': 3, 'Top Kontrolü': 2, Kondisyon: 1,
+    Şut: 5, Hız: 4, 'Top Kontrolü': 3, 'Fiziksel Güç': 3, Pas: 2, Markaj: 1,
   },
 };
 
@@ -199,55 +221,67 @@ const SKILL_TO_FIELD_SLOT: Record<SkillPosition, Position> = {
   FORVET:        'FOR',
 };
 
-// Verilen ana + ikincil mevki için formda gösterilecek nitelik listesini
-// (tekrarsız, sıralı) üretir
-function getAttributeFieldsFor(primary: SkillPosition | '', secondary: SkillPosition | ''): string[] {
-  const seen = new Set<string>();
-  const fields: string[] = [];
-  const addAll = (list: string[]) => {
-    list.forEach(f => { if (!seen.has(f)) { seen.add(f); fields.push(f); } });
-  };
-  addAll(COMMON_ATTRIBUTES);
-  if (primary)   addAll(POSITION_ATTRIBUTES[primary]);
-  if (secondary) addAll(POSITION_ATTRIBUTES[secondary]);
-  return fields;
+// Formda/oylamada gösterilecek nitelik listesi: ana mevkinin 6 beceri niteliği
+// + ayrı gösterilen Kondisyon (her zaman SON sırada). İkincil mevki artık nitelik
+// SETİNİ değiştirmez — yalnızca OVR ağırlığına harmanlanır (bkz. computeOverall).
+function getAttributeFieldsFor(primary: SkillPosition | '', _secondary?: SkillPosition | ''): string[] {
+  return [...skillAttributesFor(primary || ''), CONDITION_ATTR];
 }
 
-// Ağırlıklı OVR (0–99). Oyuncunun ANA mevkisinin ağırlık tablosuna göre
-// niteliklerin ağırlıklı ortalaması. Girilmemiş nitelikler 60 sayılır — yani
-// hiç nitelik girmemiş oyuncu 60 civarı bir OVR ile "dolu" başlar. Ana mevki
-// yoksa elde ne varsa onun düz ortalaması, o da yoksa 60.
+// Kondisyon (1-99) → OVR ÇARPANI. Nötr nokta 60 (faktör 1.0). Yüksek kondisyon
+// hafif artı (99→~1.05), düşük kondisyon eksi (1→~0.90) getirir; düşükte ceza
+// biraz daha diktir. Mevkiden BAĞIMSIZ — herkese aynı etki. Aralık sonra ayarlanır.
+function conditionFactor(attributes: Record<string, any> | null | undefined): number {
+  const raw = Number((attributes || {})[CONDITION_ATTR]);
+  const k = Number.isFinite(raw) ? Math.min(99, Math.max(1, raw)) : 60;
+  return k >= 60
+    ? 1 + ((k - 60) / 39) * 0.05
+    : 1 - ((60 - k) / 59) * 0.10;
+}
+
+// Ağırlıklı OVR (0–99). Beceri niteliklerinin (Kondisyon HARİÇ) ağırlıklı
+// ortalaması × Kondisyon çarpanı. Ağırlık = ana mevki + SECONDARY_WEIGHT_FACTOR ×
+// ikincil mevki → Defans+Forvet oyuncusunun şutu saf Defans'a göre daha çok yansır.
+// Girilmemiş nitelik 60 sayılır (hiç nitelik girmemiş oyuncu ~60 OVR ile başlar).
 function computeOverall(
   attributes: Record<string, any> | null | undefined,
   primary: SkillPosition | '' | null | undefined,
+  secondary?: SkillPosition | '' | null,
 ): number {
-  const attrs = attributes || {};
-  const weights = primary ? POSITION_WEIGHTS[primary as SkillPosition] : null;
-  if (weights) {
-    let wSum = 0;
-    let vSum = 0;
-    for (const [attr, w] of Object.entries(weights)) {
+  const attrs = migrateAttributeNames(attributes);
+  const pw = primary   ? POSITION_WEIGHTS[primary   as SkillPosition] : null;
+  const sw = secondary ? POSITION_WEIGHTS[secondary as SkillPosition] : null;
+
+  let skillOVR: number;
+  if (pw) {
+    let wSum = 0, vSum = 0;
+    for (const attr of skillAttributesFor(primary as SkillPosition)) {
+      const w = (pw[attr] || 0) + (sw ? (sw[attr] || 0) * SECONDARY_WEIGHT_FACTOR : 0);
+      if (w <= 0) continue;
       const raw = Number(attrs[attr]);
       const val = Number.isFinite(raw) ? raw : 60;
       vSum += val * w;
       wSum += w;
     }
-    return wSum ? Math.round(vSum / wSum) : 60;
+    skillOVR = wSum ? vSum / wSum : 60;
+  } else {
+    // Mevki yok — beceri niteliklerinin (Kondisyon hariç) düz ortalaması, o da yoksa 60.
+    const vals = OUTFIELD_ATTRIBUTES.map(n => Number(attrs[n])).filter(n => Number.isFinite(n));
+    skillOVR = vals.length ? vals.reduce((a, b) => a + b, 0) / vals.length : 60;
   }
-  const vals = Object.values(attrs).map(Number).filter(n => Number.isFinite(n));
-  return vals.length ? Math.round(vals.reduce((a, b) => a + b, 0) / vals.length) : 60;
+
+  return Math.min(99, Math.max(1, Math.round(skillOVR * conditionFactor(attrs))));
 }
 
-// Saha yerleşimi (posScore) ve maç-içi oyuncu kartı için, yeni nitelik
-// setinden 4 özet stat türetir. Eski jenerik pace/shooting/passing/physical
-// kolonları kaldırıldı; bu değerler artık attributes jsonb'sinden okunur.
-// İlgili nitelik yoksa 60.
+// Saha yerleşimi (posScore) ve maç-içi oyuncu kartı için, nitelik setinden 4
+// özet stat türetir. Eski jenerik pace/shooting/passing/physical kolonları
+// kaldırıldı; değerler attributes jsonb'sinden okunur. İlgili nitelik yoksa 60.
 function deriveStats(attributes: Record<string, any> | null | undefined) {
-  const a = attributes || {};
+  const a = migrateAttributeNames(attributes);
   const num = (v: any) => { const n = Number(v); return Number.isFinite(n) ? n : 60; };
   return {
-    pas:   num(a['Pas'] ?? a['Son Pas'] ?? a['Oyun Kurma'] ?? a['Top Kontrolü']),
-    sut:   num(a['Şut Gücü'] ?? a['Bitiricilik']),
+    pas:   num(a['Pas']),
+    sut:   num(a['Şut']),
     fizik: num(a['Fiziksel Güç']),
     hiz:   num(a['Hız']),
   };
@@ -259,10 +293,6 @@ function deriveStats(attributes: Record<string, any> | null | undefined) {
 const OVR_K = 0.18;
 // Oylama penceresi: maç bitişinden (polls.finished_at) sonra kaç saat açık kalır.
 const RATING_WINDOW_HOURS = 24;
-
-// Kalecilik nitelikleri — o maçta played_as_goalkeeper işaretli oyuncularda,
-// primary/secondary mevkisi ne olursa olsun oylama setine eklenir.
-const GOALKEEPER_ATTRIBUTES = POSITION_ATTRIBUTES.KALECI;
 
 // 1-10 oy ortalamasını 0-99 nitelik ölçeğine taşır (10→99, 5→~50, 1→~10).
 function ratingToAttrScale(avg10: number): number {
@@ -596,7 +626,7 @@ function memberToPlayerInfo(m: any): PlayerInfo {
     name: String(m.display_name || m.name || 'İsimsiz'),
     pos: resolveFieldPos(m.primary_position, m.position),
     secPos: resolveSecPos(m.secondary_position),
-    rating: m.overall_rating != null ? Number(m.overall_rating) : computeOverall(m.attributes, m.primary_position),
+    rating: m.overall_rating != null ? Number(m.overall_rating) : computeOverall(m.attributes, m.primary_position, m.secondary_position),
     stats: deriveStats(m.attributes),
     // teşhis logları için ham DB değerleri
     _rawPrimary: m.primary_position ?? null,
@@ -611,7 +641,7 @@ function guestToPlayerInfo(g: any): PlayerInfo {
     name: String(g.name || 'Misafir'),
     pos: resolveFieldPos(g.primary_position, g.position),
     secPos: resolveSecPos(g.secondary_position),
-    rating: g.overall_rating != null ? Number(g.overall_rating) : computeOverall(g.attributes, g.primary_position),
+    rating: g.overall_rating != null ? Number(g.overall_rating) : computeOverall(g.attributes, g.primary_position, g.secondary_position),
     stats: deriveStats(g.attributes),
     isGuest: true,
     _rawPrimary: g.primary_position ?? null,
@@ -989,6 +1019,8 @@ export default function Index() {
   const [newGuestName, setNewGuestName]         = useState('');
   const [newGuestPos, setNewGuestPos]           = useState<'KL' | 'DEF' | 'ORT' | 'FOR'>('ORT');
   const [userTeams, setUserTeams]               = useState<any[]>([]);
+  // teamId → o takımda oy vermediğin aktif yoklama var mı (Takımım'da kırmızı daire)
+  const [teamAlerts, setTeamAlerts]             = useState<Record<string, boolean>>({});
   const [showTeamSwitchModal, setShowTeamSwitchModal] = useState(false);
   const [showMyTeamPickerModal, setShowMyTeamPickerModal] = useState(false);
   const [showCreateTeamModal, setShowCreateTeamModal] = useState(false);
@@ -1148,7 +1180,7 @@ export default function Index() {
         .select('id, option_yes_label, option_sub_label, option_no_label, teams_revealed, match_date')
         .eq('team_id', teamId)
         .eq('is_active', true)
-        .single();
+        .maybeSingle();
 
       if (data) {
         // Saat bazlı otomatik arşivleme — sadece pasifleştir, kayıtları silme
@@ -1194,7 +1226,17 @@ export default function Index() {
         });
         return data.id;
       }
-    } catch { /* Aktif yoklama yok */ }
+    } catch { /* sorgu hatası — aşağıda aktif yoklama yokmuş gibi temizlenir */ }
+    // Bu takımda aktif yoklama YOK — önceki takımdan sızan poll/kadro state'ini
+    // temizle. Aksi halde (ör. A'da oyuncu, B'de kaptan) B'ye geçince A'nın
+    // aktif poll'u state'te kalıp "Maçı Bitir" gibi yetkileri yanlışlıkla açar.
+    activePollIdRef.current = null;
+    setActivePollId(null);
+    setTeamsRevealed(false);
+    setSavedTeamA([]); setSavedTeamB([]); setSavedSubstitutes([]);
+    setTeamA([]); setTeamB([]); setSubstitutes([]);
+    setKadroStale(false); setHasChanges(false);
+    await AsyncStorage.multiRemove(['@teamA', '@teamB', '@substitutes', '@formationA', '@formationB', '@match']);
     return null;
   }
 
@@ -1261,7 +1303,7 @@ export default function Index() {
       const src = r.user_id ? memMap.get(r.user_id) : gstMap.get(r.guest_id);
       const primary   = (src?.primary_position   as SkillPosition) || '';
       const secondary = (src?.secondary_position as SkillPosition) || '';
-      let attrs = primary ? getAttributeFieldsFor(primary, secondary) : [...COMMON_ATTRIBUTES];
+      let attrs = getAttributeFieldsFor(primary, secondary);
       if (r.played_as_goalkeeper) {
         const set = new Set(attrs);
         GOALKEEPER_ATTRIBUTES.forEach(a => set.add(a));
@@ -1410,11 +1452,12 @@ export default function Index() {
         const isGuest = !!agg.guestId;
         const table   = isGuest ? 'guest_players' : 'team_members';
         const curQuery = isGuest
-          ? supabase.from(table).select('attributes, primary_position').eq('id', agg.guestId)
-          : supabase.from(table).select('attributes, primary_position').eq('user_id', agg.userId).eq('team_id', teamId);
+          ? supabase.from(table).select('attributes, primary_position, secondary_position').eq('id', agg.guestId)
+          : supabase.from(table).select('attributes, primary_position, secondary_position').eq('user_id', agg.userId).eq('team_id', teamId);
         const { data: cur } = await curQuery.maybeSingle();
-        const oldAttrs: Record<string, number> = (cur?.attributes as any) || {};
-        const primary = (cur?.primary_position as SkillPosition) || null;
+        const oldAttrs: Record<string, number> = migrateAttributeNames(cur?.attributes as any);
+        const primary   = (cur?.primary_position   as SkillPosition) || null;
+        const secondary = (cur?.secondary_position as SkillPosition) || null;
 
         const newAttrs: Record<string, number> = { ...oldAttrs };
         for (const [attr, scores] of Object.entries(agg.attrs)) {
@@ -1425,7 +1468,7 @@ export default function Index() {
           const next   = Math.round(old + OVR_K * (scaled - old)); // kademeli/yumuşak
           newAttrs[attr] = Math.min(99, Math.max(1, next));
         }
-        const overall_rating = computeOverall(newAttrs, primary);
+        const overall_rating = computeOverall(newAttrs, primary, secondary);
 
         const updQuery = isGuest
           ? supabase.from(table).update({ attributes: newAttrs, overall_rating }).eq('id', agg.guestId)
@@ -1618,7 +1661,7 @@ export default function Index() {
   function openAttrModal(target: any, isGuest: boolean) {
     const primary   = (target.primary_position   as SkillPosition) || '';
     const secondary = (target.secondary_position as SkillPosition) || '';
-    const existing: Record<string, number> = target.attributes || {};
+    const existing: Record<string, number> = migrateAttributeNames(target.attributes);
     const fields = getAttributeFieldsFor(primary, secondary);
     const vals: Record<string, string> = {};
     fields.forEach(f => { vals[f] = String(existing[f] ?? 60); });
@@ -1646,7 +1689,7 @@ export default function Index() {
         attributes[f] = Math.min(99, Math.max(1, parseInt(attrVals[f]) || 60));
       });
       // OVR = ANA mevkiye göre ağırlıklı ortalama (0–99)
-      const overall_rating = computeOverall(attributes, attrPrimary);
+      const overall_rating = computeOverall(attributes, attrPrimary, attrSecondary);
       const payload = {
         primary_position:   attrPrimary,
         secondary_position: attrSecondary || null,
@@ -1698,7 +1741,38 @@ export default function Index() {
       .from('team_members')
       .select('team_id, role, teams(id, name)')
       .eq('user_id', userId);
-    if (data) setUserTeams(data.map((m: any) => ({ id: m.teams?.id, name: m.teams?.name, role: m.role })));
+    if (data) {
+      const teams = data.map((m: any) => ({ id: m.teams?.id, name: m.teams?.name, role: m.role }));
+      setUserTeams(teams);
+      await fetchTeamAlerts(userId, teams);
+    }
+  }
+
+  // Her takım için: o takımda OY VERMEDİĞİN aktif yoklama var mı? Varsa Takımım
+  // listesinde takımın yanında kırmızı daire çıkar; oy verince/pencere kapanınca söner.
+  async function fetchTeamAlerts(userId: string, teams: any[]) {
+    try {
+      const teamIds = teams.map(t => t.id).filter(Boolean);
+      if (teamIds.length === 0) { setTeamAlerts({}); return; }
+      const { data: polls } = await supabase
+        .from('polls')
+        .select('id, team_id')
+        .in('team_id', teamIds)
+        .eq('is_active', true);
+      if (!polls || polls.length === 0) { setTeamAlerts({}); return; }
+      const pollIds = polls.map((p: any) => p.id);
+      const { data: myVotes } = await supabase
+        .from('poll_votes')
+        .select('poll_id')
+        .eq('user_id', userId)
+        .in('poll_id', pollIds);
+      const votedSet = new Set((myVotes || []).map((v: any) => v.poll_id));
+      const alerts: Record<string, boolean> = {};
+      for (const p of polls as any[]) {
+        if (!votedSet.has(p.id)) alerts[p.team_id] = true; // oy vermediğin aktif yoklama
+      }
+      setTeamAlerts(alerts);
+    } catch { /* sessiz — badge kritik değil */ }
   }
 
   async function handleCreateTeam(teamName: string) {
@@ -1984,6 +2058,7 @@ export default function Index() {
     // Home'a her gelişte: kapanmış pencereleri işle + açık oylama varsa yükle
     if (screen === 'home' && myTeamInfo?.id && session?.user?.id) {
       fetchOpenRatingMatch(session.user.id, myTeamInfo.id);
+      fetchTeamAlerts(session.user.id, userTeams); // takım-yanı kırmızı daireyi tazele
     }
     if (screen !== 'create') setWizardStep(1);
   }, [screen]);
@@ -2984,7 +3059,7 @@ export default function Index() {
                 </View>
                 <View style={{ flex: 1 }}>
                   <Text style={s.playerName}>{displayName}</Text>
-                  <Text style={s.playerMetaMuted}>{pos} · {member.overall_rating != null ? Number(member.overall_rating) : computeOverall(member.attributes, member.primary_position)} OVR</Text>
+                  <Text style={s.playerMetaMuted}>{pos} · {member.overall_rating != null ? Number(member.overall_rating) : computeOverall(member.attributes, member.primary_position, member.secondary_position)} OVR</Text>
                 </View>
                 <View style={{ paddingHorizontal: 10, paddingVertical: 5, borderRadius: 8, backgroundColor: bg ?? COLORS.border }}>
                   <Text style={{ fontSize: 12, fontWeight: '700', color }}>{label}</Text>
@@ -3573,6 +3648,10 @@ export default function Index() {
             >
               <Text style={{ fontSize: 18 }}>👥</Text>
               <Text style={{ fontSize: 15, fontWeight: '700', color: COLORS.textMain }}>Takımım</Text>
+              {/* Başka bir takımda oy vermediğin aktif yoklama varsa uyar */}
+              {userTeams.some(t => t.id !== myTeamInfo?.id && teamAlerts[t.id]) && (
+                <View style={{ width: 10, height: 10, borderRadius: 5, backgroundColor: COLORS.danger, marginLeft: 2 }} />
+              )}
             </TouchableOpacity>
           </View>
         </ScrollView>
@@ -3671,6 +3750,8 @@ export default function Index() {
                   >
                     <View style={s.menuIconBox}><Text>🛡️</Text></View>
                     <Text style={s.menuBtnText}>{team.name}</Text>
+                    {teamAlerts[team.id] && <View style={{ width: 10, height: 10, borderRadius: 5, backgroundColor: COLORS.danger, marginLeft: 6 }} />}
+                    <View style={{ flex: 1 }} />
                     {myTeamInfo?.id === team.id && <Text style={{ color: COLORS.primary, fontWeight: '700', marginRight: 8, fontSize: 13 }}>✓ Aktif</Text>}
                   </TouchableOpacity>
                 ))}
@@ -3702,7 +3783,9 @@ export default function Index() {
                     onPress={() => switchTeamAndGoMyTeam(team.id)}
                   >
                     <View style={s.menuIconBox}><Text>🛡️</Text></View>
-                    <Text style={{ flex: 1, fontSize: 15, fontWeight: '700', color: COLORS.textMain }}>{team.name}</Text>
+                    <Text style={{ fontSize: 15, fontWeight: '700', color: COLORS.textMain }}>{team.name}</Text>
+                    {teamAlerts[team.id] && <View style={{ width: 10, height: 10, borderRadius: 5, backgroundColor: COLORS.danger, marginLeft: 6 }} />}
+                    <View style={{ flex: 1 }} />
                     {myTeamInfo?.id === team.id && <Text style={{ color: COLORS.primary, fontWeight: '700', marginRight: 8, fontSize: 13 }}>✓ Aktif</Text>}
                   </TouchableOpacity>
                 ))}
@@ -4290,7 +4373,7 @@ export default function Index() {
       <SafeAreaView style={s.safe}>
         <View style={s.header}>
           <TouchableOpacity
-            onPress={() => wizardStep === 2 ? setWizardStep(1) : setScreen(isCaptain ? 'votes' : 'home')}
+            onPress={() => wizardStep === 2 ? setWizardStep(1) : setScreen('home')}
             style={s.backBtn}
           >
             <Text style={s.backText}>{wizardStep === 2 ? '← Geri' : '← İptal'}</Text>
@@ -4581,7 +4664,7 @@ export default function Index() {
     const liveOverall = selectedPlayerCard
       ? (selectedPlayerCard.overall_rating != null
           ? Number(selectedPlayerCard.overall_rating)
-          : computeOverall(cardAttrs, cardPrimary))
+          : computeOverall(cardAttrs, cardPrimary, cardSecondary))
       : '—';
     const posColors: Record<string, { bg: string; accent: string }> = {
       KL:  { bg: '#3D1C00', accent: '#FB923C' },
@@ -4681,7 +4764,7 @@ export default function Index() {
                               )}
                               <View style={{ backgroundColor: COLORS.bg, paddingHorizontal: 7, paddingVertical: 2, borderRadius: 6, borderWidth: 1, borderColor: COLORS.border }}>
                                 <Text style={{ fontSize: 11, fontWeight: '700', color: COLORS.textMuted }}>
-                                  {member.overall_rating != null ? Number(member.overall_rating) : computeOverall(member.attributes, member.primary_position)} OVR
+                                  {member.overall_rating != null ? Number(member.overall_rating) : computeOverall(member.attributes, member.primary_position, member.secondary_position)} OVR
                                 </Text>
                               </View>
                             </View>
@@ -4734,7 +4817,7 @@ export default function Index() {
                           </View>
                           <View style={{ backgroundColor: COLORS.bg, paddingHorizontal: 7, paddingVertical: 2, borderRadius: 6, borderWidth: 1, borderColor: COLORS.border }}>
                             <Text style={{ fontSize: 11, fontWeight: '700', color: COLORS.textMuted }}>
-                              {guest.overall_rating != null ? Number(guest.overall_rating) : computeOverall(guest.attributes, guest.primary_position)} OVR
+                              {guest.overall_rating != null ? Number(guest.overall_rating) : computeOverall(guest.attributes, guest.primary_position, guest.secondary_position)} OVR
                             </Text>
                           </View>
                         </View>
@@ -4966,6 +5049,15 @@ export default function Index() {
                     <View style={{ gap: 14 }}>
                       {getAttributeFieldsFor(attrPrimary, attrSecondary).map(field => (
                         <View key={field}>
+                          {/* Kondisyon beceri niteliklerinden ayrı gösterilir —
+                              OVR'a ağırlık değil ÇARPAN olarak girer. */}
+                          {field === CONDITION_ATTR && (
+                            <View style={{ borderTopWidth: 1, borderColor: COLORS.border, marginBottom: 12, paddingTop: 4 }}>
+                              <Text style={{ fontSize: 11, fontWeight: '700', color: COLORS.textMuted, letterSpacing: 0.5 }}>
+                                GENEL · OVR'a çarpan etkisi
+                              </Text>
+                            </View>
+                          )}
                           <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 6 }}>
                             <Text style={{ fontSize: 14, fontWeight: '600', color: COLORS.textMain }}>{field}</Text>
                             <Text style={{ fontSize: 13, fontWeight: '700', color: COLORS.primary }}>{attrVals[field] ?? '60'}</Text>

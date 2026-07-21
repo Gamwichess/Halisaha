@@ -144,6 +144,12 @@ export default function MatchRatingScreen({ teamName, players, onSubmit, onCance
                   const val = scores[p.key]?.[attr] ?? DEFAULT_SCORE;
                   return (
                     <View key={attr} style={{ marginBottom: 10 }}>
+                      {/* Kondisyon beceri niteliklerinden ayrı gösterilir. */}
+                      {attr === 'Kondisyon' && (
+                        <View style={{ borderTopWidth: 1, borderColor: C.border, marginBottom: 10, paddingTop: 8 }}>
+                          <Text style={{ fontSize: 10, fontWeight: '700', color: C.textMuted, letterSpacing: 0.5 }}>GENEL</Text>
+                        </View>
+                      )}
                       <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 5 }}>
                         <Text style={{ fontSize: 13, fontWeight: '600', color: C.textMain }}>{attr}</Text>
                         <Text style={{ fontSize: 13, fontWeight: '800', color: accent }}>{val}</Text>
