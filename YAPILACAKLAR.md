@@ -3,32 +3,35 @@
 > `/baslat` ile okunur, `/bitir` ile güncellenir. "Sonraya / Erken" bölümü = unutturma notları.
 
 ## Aktif (şu an üstünde çalışılan)
-- [ ] Otomatik maç-sonu performans oylaması (kararlar DURUM.md'de). Adımlar:
-  - [ ] Migration: player_ratings tablosu + unique constraint + ratings_processed_at guard
-  - [ ] Oylama UI'ı: maç sonu, kendisi hariç saha oyuncuları, mevkiye göre nitelikler, 10'luk puanlama
-  - [ ] Kaleci hibrit: o maçta played_as_goalkeeper işaretli oyuncuya kalecilik nitelikleri de sorulsun
-  - [ ] Pencere kapanınca (24 saat) client-side lazy kademeli OVR güncellemesi (atomik guard'lı)
+- [ ] **TestFlight submit — 1.0.1 / build #6**: EAS build çalıştı, otomatik submit `ascAppId` yokluğundan takıldı. Build bitince: `! eas submit -p ios --latest` (interaktif) VEYA `eas.json` submit.production'a `ascAppId` ekleyip non-interactive gönder.
 
 ## Bilinen Buglar (takip et — durumları belirsiz, test edilecek)
-- [ ] "Kadroları Açıkla" bayat state: önceki maç iptal edilip yeni maç açılınca buton yanlış aktif geliyordu. Teşhis edildi, çözüldü mü belirsiz — test et.
-- [ ] Saha yerleştirmede mevki karışması (defans→orta saha, forvet→defans). Birkaç kez denendi, güçlü modele geçildi. Doğrulanmadı — test et.
-- [ ] Yedek yerleştirme de mevkiye göre yapılmıyordu — saha ile aynı mantığa çekildi mi doğrula.
+- [ ] Saha yerleştirmede mevki karışması (defans→orta saha, forvet→defans). Güçlü modele geçildi ama doğrulanmadı — test et. (NOT: nitelik seti sadeleştiği için deriveStats/posScore yeni adlarla çalışıyor, bir daha bakmak gerekebilir.)
+- [ ] Yedek yerleştirme de mevkiye göre yapılıyor mu — doğrula.
 - [ ] Gruba paylaşımda metin gitmiyor (sadece görsel). Talimat verildi, sonuç belirsiz — test et.
+- [ ] "Kadroları Açıkla" bayat state — önceki oturumdan; scope düzeltmesiyle ilgili olabilir ama ayrıca test et.
 
 ## Sonraya / Erken (UNUTTURMA — şimdi yapma, ama hatırlat)
 - [ ] **RLS'i aç** — public TestFlight/yayın ÖNCESİ zorunlu. Şu an kapalı. En kritik yayın-öncesi iş. (Erken: önce özellikler otursun.)
-- [ ] **Sohbet / mesajlaşma özelliği** (emoji + GIF destekli). Ayrı sistem: messages tablosu, realtime subscription, emoji picker, GIF için Giphy/Tenor API. (Erken: en sona bırakıldı, diğer işler bitince.)
-- [ ] **guestVotesLocal kalıcılığı**: misafirin "Kesin Var" işareti uygulama kapanınca sıfırlanıyor. Gerçek üye oyu gibi kalıcı yapılsın mı? (Açık soru — oylama sistemi oturunca değerlendir.)
-- [ ] **Mevki ağırlıkları (POSITION_WEIGHTS) ince ayarı** — ilk sürüm makul varsayılanlarla kuruldu, denge oturunca gözden geçir.
-- [ ] **OVR kademeli güncelleme sabiti K** — 0.15–0.2 ile başla, gerçek oylama verisi gelince ayarla.
-- [ ] **Supabase pause**: free tier 7 günde bir duraklıyor. Şimdilik haftada 1 manuel dashboard girişiyle idare ediliyor. Gerçek kullanıcı trafiği başlayınca sorun kendiliğinden çözülebilir; launch'a yakın Pro'ya geçiş düşünülebilir.
+- [ ] **Mevcut oyuncuların OVR'ını toplu yeniden-hesapla** — nitelik sistemi değişti; eski satırların stored `overall_rating`'i ancak yeniden kaydedilince güncelleniyor. İstenirse "hepsini yeni sisteme çevir" butonu/script eklenebilir. (Açık soru — gerçek veri az olduğu için acil değil.)
+- [ ] **eas.json'a `ascAppId` ekle** — kalıcı otomatik TestFlight submit için. Bir kez App Store Connect Apple ID'si girilince `--auto-submit --non-interactive` sorunsuz çalışır.
+- [ ] **Sohbet / mesajlaşma özelliği** (emoji + GIF). Ayrı sistem: messages tablosu, realtime, emoji picker, Giphy/Tenor API. (Erken: en sona.)
+- [ ] **guestVotesLocal kalıcılığı**: misafirin "Kesin Var" işareti uygulama kapanınca sıfırlanıyor. Kalıcı yapılsın mı? (Açık soru.)
+- [ ] **POSITION_WEIGHTS ince ayarı** — yeni 6'lı sisteme göre makul varsayılanlarla kuruldu (SECONDARY_WEIGHT_FACTOR=0.5 dahil). Gerçek kullanım oturunca gözden geçir.
+- [ ] **Kondisyon çarpan aralığı (~0.90–1.05) ve OVR sabiti K (0.18)** — gerçek oylama verisi gelince ayarla.
+- [ ] **Supabase pause**: free tier 7 günde bir duraklıyor. Haftada 1 manuel dashboard girişiyle idare. Launch'a yakın Pro'ya geçiş düşünülebilir.
 
-## Tamamlananlar (son oturumlar)
-- [x] Mevki bazlı nitelik sistemi + ağırlıklı OVR
-- [x] "vizyon" ve "hareketlilik" nitelikleri kaldırıldı
-- [x] measureLayout hatası (KeyboardAwareScrollView'e geçildi)
-- [x] Maç saati 24 saat yapıldı
-- [x] Maç sonu istatistik şema blokajı çözüldü
-- [x] Oyuncu rol etiketi (Kaptan/Yardımcı Kaptan/Takım Üyesi)
-- [x] Toplam gol istatistiği gösterimi
-- [x] Misafir oyuncular kadroya girebiliyor (üye+misafir havuzu birleşik)
+## Tamamlananlar (son oturum)
+- [x] **Nitelik sistemi sadeleştirildi**: saha 6 ortak (Şut/Pas/Top Kontrolü/Markaj/Hız/Fiziksel Güç) + kaleci 6 (Uzanış/Tutuş/Dağıtım/Refleks/Hız/Pozisyon); ikincil mevki nitelik seti eklemez.
+- [x] **Kondisyon = çarpan**: ayrı gösterim + OVR'a conditionFactor (~0.90–1.05, nötr 60).
+- [x] **OVR ikincil mevki harmanı** (primary + 0.5×secondary); `computeOverall` artık secondary alıyor; eski nitelik adları `migrateAttributeNames` ile eşleniyor.
+- [x] **Maç-sonu oylama sistemi çalışır hale geldi** (player_ratings migration push'landı; UI + kademeli OVR + atomik guard).
+- [x] **Takım scope açığı kapatıldı** — `fetchActivePoll` aktif yoklama yokken sızan poll/kadro state'ini temizliyor (A'da oyuncu/B'de kaptan sızıntısı).
+- [x] **Maç oluştur → geri** artık home'a gidiyor (yoklama ekranına değil).
+- [x] **Takımım kırmızı daire** — oy vermediğin aktif yoklaması olan takımların yanında.
+- [x] Sürüm 1.0.1'e yükseltildi, iOS build alındı.
+
+## Tamamlananlar (önceki oturumlar)
+- [x] Mevki bazlı nitelik sistemi + ağırlıklı OVR; "vizyon"/"hareketlilik" kaldırıldı
+- [x] measureLayout hatası (KeyboardAwareScrollView); maç saati 24 saat
+- [x] Maç sonu istatistik şema blokajı; oyuncu rol etiketi; toplam gol; misafir kadroya girişi
