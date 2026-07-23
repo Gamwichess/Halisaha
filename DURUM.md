@@ -23,6 +23,15 @@
 - Maç sonu istatistik girişi + toplam gol gösterimi
 - Pull-to-refresh tüm ekranlarda
 - Çok takımlı kullanım: takım scope'u artık düzgün izole (scope açığı kapandı)
+- **Ana takım seçimi**: Kalıcı `@mainTeamId` — tek takımda otomatik, çok takımda seçili ana takım gösterilir (aşağıda mimari not)
+
+## Son Oturumda Yapılanlar (2026-07-24)
+- **Maç otomatik bitince oylama gelmiyordu** → düzeltildi (bkz. Maç-Sonu Oylama Mimarisi; ⏳ ileri saatli gerçek maçla doğrulanacak).
+- **Pull-to-refresh'te oylama gelmiyordu** → `onRefresh` home dalına `fetchOpenRatingMatch`+`fetchTeamAlerts` eklendi.
+- **Nitelik girişi scroll zıplaması** → düzeltildi ve TEST EDİLDİ. `KeyboardAwareScrollView`'ın modal+maxHeight içindeki otomatik kaydırması listeyi tepeye atıyordu; `enableAutomaticScroll={false}` + her alanın `onLayout` y'siyle odaklanınca üst-ortaya elle kaydırma (measureLayout yok → crash yok).
+- **Paylaşımda WhatsApp grup caption'ı düşürüyor** → maç bilgisi artık paylaşılan SAHA GÖRSELİNİN içine şerit olarak basılıyor (`FullField`'a `matchInfo` prop'u + `buildShareInfo()`). TEST EDİLDİ, çalışıyor.
+- **Maç oluşturunca ana ekrana dön** → "Yoklamayı Başlat" `setScreen('votes')` yerine `setScreen('home')`. TEST EDİLDİ.
+- **Ana takım / "takımda değilsiniz" bug'ı** → `fetchMyTeam` `.single()` kaldırıldı, `@mainTeamId` mimarisi kuruldu (aşağıda not).
 
 ## Mevki / Nitelik Mimarisi (kalıcı notlar — GÜNCEL)
 Bu bölüm bu oturumda TAMAMEN yenilendi. Eski "ortak + primary + secondary union" modeli KALDIRILDI.
@@ -43,9 +52,18 @@ Bu bölüm bu oturumda TAMAMEN yenilendi. Eski "ortak + primary + secondary unio
 - Tablo `player_ratings` (poll_id="maç", voter_id hep üye, rated_user_id/rated_guest_id'den biri, attribute, score 1–10). Unique: (poll_id, voter_id, coalesce(rated_user,rated_guest), attribute). Guard: `polls.ratings_processed_at`.
 - Sabitler: `OVR_K = 0.18` (kademeli yumuşatma `yeni = eski + K×(maç_ort − eski)`), `RATING_WINDOW_HOURS = 24`.
 - Akış: `fetchOpenRatingMatch` (home yüklenince + takım değişince) → biten (is_finished, finished_at<24h) ve voter'ın `lineup='field'` olduğu maçı bulur → 🗳️ "Performans Oyla" butonu. `submitMatchRatings` delete+insert. `processExpiredRatingMatches`/`processMatchRatings` pencere kapanınca atomik guard'lı (koşullu UPDATE `ratings_processed_at is null`) kademeli OVR günceller. Misafir oylanır, oy veremez.
+- **OTOMATİK BİTİŞ DÜZELTMESİ (bu oturum)**: Maç saati kendi kendine geçince oylama gelmiyordu. Kök neden: `fetchActivePoll` zaman aşımında SADECE `is_active:false` yapıyor, `is_finished`/`finished_at` yazmıyordu → pencere hiç açılmıyordu (maç "silinmiyor", arşivleniyor). Düzeltildi: zaman aşımı dalında artık `is_active:false + is_finished:true + finished_at` (`.is('finished_at', null)` guard'lı) yazılıyor ve `fetchOpenRatingMatch` tetikleniyor. Ayrıca pull-to-refresh (`onRefresh` home dalı) `fetchOpenRatingMatch` çağırmıyordu → eklendi. NOT: yalnızca `is_active=true` maçlar bu dala girer; düzeltmeden önce kapanmış eski maçlar geriye dönük açılmaz. ⏳ **İleri saatli GERÇEK maçla doğrulanacak** (geçmişe-dönük kurulanda tetiklenmiyor gibi görünüyor — test edilecek).
+
+## Ana Takım Mimarisi (kalıcı notlar)
+- Kalıcı anahtar `@mainTeamId` (AsyncStorage). Hangi takımın ana ekranda gösterileceğini tutar.
+- `fetchMyTeam` artık `.single()` KULLANMIYOR (çok takımda "çok satır" hatası verip hasTeam=false → "takımda değilsiniz" yapıyordu). Bunun yerine tüm üyelikleri çeker; `@mainTeamId` üyeliklerden biriyse onu, değilse ilk takımı seçer ve `@mainTeamId`'ye sabitler → tek takımda otomatik seçim.
+- `switchTeam` / `switchTeamAndGoMyTeam` (Takımım'dan seçim) seçilen takımı `@mainTeamId`'ye yazar → kalıcı.
+- `handleCreateTeam` ve `handleAcceptInvite` yeni takımı `@mainTeamId` yapar → oluşturunca/katılınca o takım görünür.
+- Takımdan ayrılma (`leave_team`): ayrılan ana takımsa `@mainTeamId` silinir, `fetchMyTeam` tekrar çağrılır → kalan takıma otomatik geçer (reload gerekmez).
 
 ## Devam Eden / Yarım Kalan İş
 - **TestFlight submit (1.0.1 / build #6)**: EAS build çalıştı ama `--auto-submit` `eas.json`'da `ascAppId` olmadığı için `--non-interactive`'te takıldı. İlk iş: build bitince ya `! eas submit -p ios --latest` (interaktif, bundle'dan bulur) ya da `eas.json` submit.production'a `ascAppId` ekleyip non-interactive gönder. (ascAppId = App Store Connect → uygulama → App Information → "Apple ID" numarası.)
+- **⏳ HATIRLAT — otomatik maç-sonu oylama doğrulaması**: Otomatik bitiş düzeltmesi kodlandı ama geçmişe-dönük kurulan maçta tetiklenmiyor gibi. Kullanıcı **ileri saatli gerçek bir maç** kurup saati geçince oylamanın otomatik geldiğini doğrulayacak. Test aşamasındaki arkadaşlardan da feedback alınacak. (Bu oturumda unutmadan hatırlat.)
 
 ## Çalışma Tarzı / Tercihler
 - Kullanıcı Türkçe konuşur.

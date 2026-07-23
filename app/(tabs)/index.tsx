@@ -834,7 +834,7 @@ function PlayerStatModal({ visible, player, teamColor, onClose }: any) {
 // ─── SAHA BİLEŞENLERİ ────────────────────────────────────────────────────────
 
 function FullField({
-  teamA, teamB, substitutes, selectedId, onTap, onLongPress, onSubTap, onMoveToBench, onMoveToField, votes, fieldRef,
+  teamA, teamB, substitutes, selectedId, onTap, onLongPress, onSubTap, onMoveToBench, onMoveToField, votes, fieldRef, matchInfo,
 }: {
   teamA: FieldPlayer[]; teamB: FieldPlayer[]; substitutes: PlayerInfo[];
   selectedId: string | null;
@@ -845,6 +845,9 @@ function FullField({
   onMoveToField: (team: 'A' | 'B') => void;
   votes: Record<string, Vote>;
   fieldRef: any;
+  // Paylaşılan görsele gömülen maç bilgisi şeridi. WhatsApp grup sohbetinde
+  // caption (metin) düştüğü için bilgiyi görselin İÇİNE basıyoruz.
+  matchInfo?: { name: string; dateStr: string; startTime: string; endTime: string; location: string; price: number; perPerson: number; teamSize?: number };
 }) {
   const pad = 16;
   const W = FIELD_W; const H = FIELD_H;
@@ -900,6 +903,17 @@ function FullField({
   return (
     <View ref={fieldRef} collapsable={false}
       style={{ width: '100%', alignItems: 'center', backgroundColor: '#FFF', padding: 16, borderRadius: 20, ...s.shadow }}>
+      {matchInfo && (
+        <View style={{ width: '100%', marginBottom: 12, paddingBottom: 10, borderBottomWidth: 1, borderColor: '#E5E7EB' }}>
+          <Text style={{ fontSize: 15, fontWeight: '800', color: '#111827' }} numberOfLines={1}>⚽ {matchInfo.name}</Text>
+          <Text style={{ fontSize: 12, fontWeight: '600', color: '#4B5563', marginTop: 3 }} numberOfLines={2}>
+            📅 {formatDateStr(matchInfo.dateStr)}  ⏰ {matchInfo.startTime}-{matchInfo.endTime}   📍 {matchInfo.location}
+          </Text>
+          <Text style={{ fontSize: 12, fontWeight: '700', color: '#4B5563', marginTop: 3 }}>
+            💵 Kasa {matchInfo.price || 0}₺ · Kişi başı ~{matchInfo.perPerson}₺{matchInfo.teamSize ? `   🏟️ ${matchInfo.teamSize}v${matchInfo.teamSize}` : ''}
+          </Text>
+        </View>
+      )}
       <View style={{ width: W, height: H, borderRadius: 16, overflow: 'hidden', backgroundColor: COLORS.fieldDark, marginBottom: 12 }}>
         <Svg width={W} height={H} style={{ position: 'absolute' }}>
           <Rect x={0} y={0} width={W} height={H} fill={COLORS.fieldDark} />
@@ -1096,6 +1110,12 @@ export default function Index() {
   const fieldRef         = useRef<View>(null);
   const playersScrollRef = useRef<ScrollView>(null);
   const playersScrollY   = useRef<number>(0);
+  // Nitelik modalı: odaklanan alanı ortaya kaydırmak için konum takibi.
+  // attrFieldsBaseY = nitelik listesinin (gap View) içerik tepesinden ofseti;
+  // attrFieldY[field] = her alanın o listedeki y'si. Toplamı = mutlak scroll y.
+  const attrScrollRef    = useRef<any>(null);
+  const attrFieldsBaseY  = useRef<number>(0);
+  const attrFieldY        = useRef<Record<string, number>>({});
   // İptal/yeni maç sırasında bayat (stale) Supabase kadro fetch'lerinin
   // yanlış poll'un state'ini/AsyncStorage'ını ezmesini önlemek için
   const activePollIdRef  = useRef<string | null>(null);
@@ -1200,12 +1220,23 @@ export default function Index() {
           const matchEnd     = new Date(yy, mm - 1, dd, hh, min, 0);
 
           if (matchEnd < new Date()) {
-            await supabase.from('polls').update({ is_active: false }).eq('id', data.id);
+            // Maç saati geçti. Sadece pasifleştirmek YETMEZ: maç-sonu performans
+            // oylaması penceresi ancak is_finished=true + finished_at ile açılır
+            // (bkz. fetchOpenRatingMatch). Kaptan "Maçı Bitir"e basmadan maç kendi
+            // kendine bittiğinde de oylama gelsin diye burada BİTMİŞ işaretliyoruz.
+            // finished_at yalnızca bir kez set edilir (finished_at IS NULL guard'ı)
+            // → tekrar tekrar açılışta finished_at ileri kaymaz, 24h pencere sabit.
+            await supabase.from('polls')
+              .update({ is_active: false, is_finished: true, finished_at: new Date().toISOString() })
+              .eq('id', data.id)
+              .is('finished_at', null);
             activePollIdRef.current = null;
             setActivePollId(null);
             setTeamsRevealed(false);
             setSavedTeamA([]); setSavedTeamB([]); setSavedSubstitutes([]);
             await AsyncStorage.multiRemove(['@teamA', '@teamB', '@substitutes', '@formationA', '@formationB']);
+            // Oylamayı aynı açılışta göster — home effect'inin ayrıca çağırmasını bekleme
+            if (session?.user?.id) fetchOpenRatingMatch(session.user.id, teamId);
             return null;
           }
         }
@@ -1482,11 +1513,24 @@ export default function Index() {
 
   async function fetchMyTeam(userId: string) {
     try {
-      const { data: memberData } = await supabase
+      // Kullanıcının TÜM üyelikleri. (.single() KALDIRILDI — çok takımda "çok satır"
+      // hatası verip hasTeam=false yapıyordu → "takımda değilsiniz".)
+      const { data: memberships } = await supabase
         .from('team_members')
         .select('team_id, role')
-        .eq('user_id', userId)
-        .single();
+        .eq('user_id', userId);
+
+      // Hedef takım: kayıtlı @mainTeamId üyeliklerden biriyse onu; değilse ilk
+      // takımı kullan ve @mainTeamId'yi ona sabitle. Böylece TEK takımda otomatik
+      // seçilir, ÇOK takımda kalıcı "ana takım" gösterilir (Takımım'dan değişince güncellenir).
+      let memberData: { team_id: string; role: string } | null = null;
+      if (memberships && memberships.length > 0) {
+        const savedMain = await AsyncStorage.getItem('@mainTeamId');
+        memberData = (savedMain && memberships.find((m: any) => m.team_id === savedMain)) || memberships[0];
+        if (memberData.team_id !== savedMain) {
+          await AsyncStorage.setItem('@mainTeamId', memberData.team_id);
+        }
+      }
 
       if (memberData) {
         setHasTeam(true);
@@ -1632,9 +1676,13 @@ export default function Index() {
       if (error) throw error;
       await supabase.from('profiles').update({ pending_invite_code: null }).eq('id', session.user.id);
       const teamName = pendingInviteInfo.teamName;
+      const joinedTeamId = pendingInviteInfo.teamId;
       setPendingInviteInfo(null);
       setHasTeam(true);
+      // Katılınan takımı ana takım yap → fetchMyTeam onu göstersin; switcher için listeyi tazele.
+      await AsyncStorage.setItem('@mainTeamId', joinedTeamId);
       await fetchMyTeam(session.user.id);
+      await fetchUserTeams(session.user.id);
       Alert.alert('Hoş Geldin! 🎉', `${teamName} takımına katıldın!`);
     } catch (err: any) {
       Alert.alert('Hata', err.message);
@@ -1795,6 +1843,8 @@ export default function Index() {
     if (memberError) { Alert.alert('Hata', memberError.message); return; }
     setNewTeamName('');
     setShowCreateTeamModal(false);
+    // Yeni oluşturulan takımı ana takım yap → fetchMyTeam onu yüklesin (eski ana takım değil).
+    await AsyncStorage.setItem('@mainTeamId', yeniTakim.id);
     await fetchMyTeam(session.user.id);
     await fetchUserTeams(session.user.id);
     setScreen('my_team');
@@ -1808,6 +1858,8 @@ export default function Index() {
     if (!teamEntry) return;
     const { data: teamData } = await supabase.from('teams').select('*').eq('id', teamId).single();
     if (!teamData) return;
+    // Seçilen takımı kalıcı ana takım yap → sonraki açılışta ana ekranda bu gelir.
+    await AsyncStorage.setItem('@mainTeamId', teamId);
     setMyTeamInfo(teamData);
     setIsCaptain(teamEntry.role === 'captain' || teamEntry.role === 'admin');
     setMyRole(teamEntry.role as TeamMemberRole);
@@ -1910,6 +1962,8 @@ export default function Index() {
     if (!teamEntry) return;
     const { data: teamData } = await supabase.from('teams').select('*').eq('id', teamId).single();
     if (!teamData) return;
+    // Seçilen takımı kalıcı ana takım yap → sonraki açılışta ana ekranda bu gelir.
+    await AsyncStorage.setItem('@mainTeamId', teamId);
     setMyTeamInfo(teamData);
     const newIsCaptain = teamEntry.role === 'captain' || teamEntry.role === 'admin';
     setIsCaptain(newIsCaptain);
@@ -2632,6 +2686,19 @@ export default function Index() {
     return msg;
   }
 
+  // Paylaşılan saha görseline gömülecek maç bilgisi (kişi başı hesabı dahil).
+  // buildKadroMessage'la aynı perPerson mantığını kullanır.
+  function buildShareInfo() {
+    const activeCount = (teamA.length + teamB.length) || 1;
+    const maxCapacity = match.teamSize ? (match.teamSize * 2) : activeCount;
+    const divisor     = Math.min(activeCount, maxCapacity);
+    const perPerson   = Math.ceil((match.price || 0) / Math.max(divisor, 1));
+    return {
+      name: match.name, dateStr: match.dateStr, startTime: match.startTime, endTime: match.endTime,
+      location: match.location, price: match.price || 0, perPerson, teamSize: match.teamSize,
+    };
+  }
+
   const shareKadro = async () => {
     const msg = buildKadroMessage();
     try {
@@ -2903,6 +2970,14 @@ export default function Index() {
         case 'home':
           await fetchMyTeam(session.user.id);
           await fetchUnreadNotifs(session.user.id);
+          // Aşağı çekince de home ziyareti gibi davran: kapanmış pencereleri işle,
+          // açık maç-sonu oylaması varsa göster. (fetchMyTeam içindeki
+          // fetchActivePoll maçı is_finished işaretler ama maç zaten is_active=false
+          // olduysa oraya girmez; bu yüzden oylamayı burada ayrıca tetikliyoruz.)
+          if (myTeamInfo?.id) {
+            await fetchOpenRatingMatch(session.user.id, myTeamInfo.id);
+            await fetchTeamAlerts(session.user.id, userTeams);
+          }
           if (activePollId) {
             if (isCaptain) await fetchPollVotes(activePollId);
             else await fetchPollSummary();
@@ -3223,6 +3298,7 @@ export default function Index() {
                 onMoveToField={handleMoveToField}
                 votes={pollVotesMap}
                 fieldRef={fieldRef}
+                matchInfo={buildShareInfo()}
               />
               <Text style={s.instructionText}>İki oyuncuya sırayla dokun → yer değiştir · Uzun bas → istatistik</Text>
             </View>
@@ -4218,6 +4294,7 @@ export default function Index() {
                 onMoveToField={handleMoveToField}
                 votes={pollVotesMap}
                 fieldRef={fieldRef}
+                matchInfo={buildShareInfo()}
               />
               <Text style={s.instructionText}>İki oyuncuya sırayla dokun → yer değiştir · Uzun bas → istatistik</Text>
             </View>
@@ -4561,7 +4638,8 @@ export default function Index() {
                     setTeamsRevealed(false);
                     setSavedTeamA([]); setSavedTeamB([]); setSavedSubstitutes([]);
                     await AsyncStorage.multiRemove(['@teamA', '@teamB', '@substitutes', '@formationA', '@formationB']);
-                    setScreen('votes');
+                    // Yoklama başlatınca kaptanı ana ekrana at (oylama/kadro ekranına değil)
+                    setScreen('home');
                     await handleOpenPoll(editMatch);
                   }}
                 >
@@ -4988,15 +5066,17 @@ export default function Index() {
                   </TouchableOpacity>
                 </View>
 
-                {/* Klavye altında kalmayı KeyboardAwareScrollView yönetir —
-                    odaklanan TextInput'a otomatik kaydırır (manuel measureLayout
-                    kaldırıldı). */}
+                {/* Otomatik kaydırma KAPALI: modal + maxHeight içinde KAS'ın kendi
+                    ölçümü şaşıp listeyi en üste zıplatıyordu. Bunun yerine odaklanan
+                    alanı onLayout ile bilinen mutlak y'ye göre elle ORTALIYORUZ
+                    (measureLayout yok → crash yok). */}
                 <KeyboardAwareScrollView
+                  ref={attrScrollRef}
                   style={{ maxHeight: 440 }}
                   contentContainerStyle={{ padding: 20, paddingBottom: 12 }}
                   keyboardShouldPersistTaps="handled"
                   enableOnAndroid
-                  extraScrollHeight={20}
+                  enableAutomaticScroll={false}
                 >
                   <Text style={s.inputLabel}>Ana Mevki</Text>
                   <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginBottom: 18 }}>
@@ -5046,9 +5126,15 @@ export default function Index() {
                   </View>
 
                   {attrPrimary ? (
-                    <View style={{ gap: 14 }}>
+                    <View
+                      style={{ gap: 14 }}
+                      onLayout={e => { attrFieldsBaseY.current = e.nativeEvent.layout.y; }}
+                    >
                       {getAttributeFieldsFor(attrPrimary, attrSecondary).map(field => (
-                        <View key={field}>
+                        <View
+                          key={field}
+                          onLayout={e => { attrFieldY.current[field] = e.nativeEvent.layout.y; }}
+                        >
                           {/* Kondisyon beceri niteliklerinden ayrı gösterilir —
                               OVR'a ağırlık değil ÇARPAN olarak girer. */}
                           {field === CONDITION_ATTR && (
@@ -5068,6 +5154,13 @@ export default function Index() {
                             maxLength={2}
                             value={attrVals[field] ?? ''}
                             onChangeText={t => setAttrVals(prev => ({ ...prev, [field]: t.replace(/[^0-9]/g, '') }))}
+                            onFocus={() => {
+                              // Odaklanan alanı görünür alanın üst-orta bölgesine kaydır
+                              // (klavye altta kalmayacak şekilde). Mutlak y = liste ofseti
+                              // + alanın liste içindeki y'si.
+                              const absY = attrFieldsBaseY.current + (attrFieldY.current[field] || 0);
+                              attrScrollRef.current?.scrollToPosition(0, Math.max(0, absY - 120), true);
+                            }}
                           />
                         </View>
                       ))}
@@ -5183,19 +5276,19 @@ export default function Index() {
                       p_user_id: session.user.id,
                     });
                     if (error) { Alert.alert('Hata', error.message); return; }
+                    // Ayrılınan takım ana takımsa kaydı temizle → fetchMyTeam kalan ilk takıma geçer.
+                    const savedMain = await AsyncStorage.getItem('@mainTeamId');
+                    if (savedMain === teamId) await AsyncStorage.removeItem('@mainTeamId');
                     setMyTeamInfo(null);
                     setMyTeamMembers([]);
                     setIsCaptain(false);
                     setMyRole(null);
                     setActivePollId(null);
-                    setHasTeam(false);
                     setUserTeams(prev => prev.filter(t => t.id !== teamId));
-                    if (data === 'team_deleted') {
-                      setScreen('home');
-                    } else {
-                      await fetchUserTeams(session.user.id);
-                      setScreen('home');
-                    }
+                    await fetchUserTeams(session.user.id);
+                    // Kalan takım varsa otomatik yükler (hasTeam'i doğru ayarlar); yoksa hasTeam=false.
+                    await fetchMyTeam(session.user.id);
+                    setScreen('home');
                   }},
                 ]
               );

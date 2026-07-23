@@ -6,10 +6,15 @@
 - [ ] **TestFlight submit — 1.0.1 / build #6**: EAS build çalıştı, otomatik submit `ascAppId` yokluğundan takıldı. Build bitince: `! eas submit -p ios --latest` (interaktif) VEYA `eas.json` submit.production'a `ascAppId` ekleyip non-interactive gönder.
 
 ## Bilinen Buglar (takip et — durumları belirsiz, test edilecek)
+- [ ] **⏳ Otomatik maç-sonu oylama doğrulaması**: Otomatik bitiş düzeltmesi kodlandı ama geçmişe-dönük kurulan maçta tetiklenmiyor gibi. **İleri saatte gerçek bir maç** kurup, saati geçince oylamanın otomatik geldiğini doğrula. Test aşamasındaki arkadaşlardan feedback al. (Kod: `fetchActivePoll` zaman aşımı dalı + `onRefresh` home.)
 - [ ] Saha yerleştirmede mevki karışması (defans→orta saha, forvet→defans). Güçlü modele geçildi ama doğrulanmadı — test et. (NOT: nitelik seti sadeleştiği için deriveStats/posScore yeni adlarla çalışıyor, bir daha bakmak gerekebilir.)
 - [ ] Yedek yerleştirme de mevkiye göre yapılıyor mu — doğrula.
-- [ ] Gruba paylaşımda metin gitmiyor (sadece görsel). Talimat verildi, sonuç belirsiz — test et.
 - [ ] "Kadroları Açıkla" bayat state — önceki oturumdan; scope düzeltmesiyle ilgili olabilir ama ayrıca test et.
+
+## Sıradaki İşler (acelesi yok ama sırada)
+- [ ] **Oyuncu detay menüsü UI**: Oyuncuya tıklayınca açılan menü referans görseldeki gibi görünmeli — mevcut UI kötü. (⚠️ Referans görsel işe başlarken kullanıcıdan alınacak — görsel olmadan başlanamaz.)
+- [ ] **Takım logosu + "Takımım" özelleştirme**: Takım logosu oluşturma/yükleme, "Takımım" ekranını özelleştirme (isim, renk, logo). (Supabase storage bucket + teams tablosuna logo_url gerekebilir.)
+- [ ] **Maç hatırlatıcı bildirimi**: Maç saati yaklaşınca push/local bildirim. Kaç saat önce ve açık/kapalı kullanıcı ayarı olmalı. (expo-notifications local schedule; ayar `@pollSettings` benzeri saklanır.)
 
 ## Sonraya / Erken (UNUTTURMA — şimdi yapma, ama hatırlat)
 - [ ] **RLS'i aç** — public TestFlight/yayın ÖNCESİ zorunlu. Şu an kapalı. En kritik yayın-öncesi iş. (Erken: önce özellikler otursun.)
@@ -21,17 +26,15 @@
 - [ ] **Kondisyon çarpan aralığı (~0.90–1.05) ve OVR sabiti K (0.18)** — gerçek oylama verisi gelince ayarla.
 - [ ] **Supabase pause**: free tier 7 günde bir duraklıyor. Haftada 1 manuel dashboard girişiyle idare. Launch'a yakın Pro'ya geçiş düşünülebilir.
 
-## Tamamlananlar (son oturum)
-- [x] **Nitelik sistemi sadeleştirildi**: saha 6 ortak (Şut/Pas/Top Kontrolü/Markaj/Hız/Fiziksel Güç) + kaleci 6 (Uzanış/Tutuş/Dağıtım/Refleks/Hız/Pozisyon); ikincil mevki nitelik seti eklemez.
-- [x] **Kondisyon = çarpan**: ayrı gösterim + OVR'a conditionFactor (~0.90–1.05, nötr 60).
-- [x] **OVR ikincil mevki harmanı** (primary + 0.5×secondary); `computeOverall` artık secondary alıyor; eski nitelik adları `migrateAttributeNames` ile eşleniyor.
-- [x] **Maç-sonu oylama sistemi çalışır hale geldi** (player_ratings migration push'landı; UI + kademeli OVR + atomik guard).
-- [x] **Takım scope açığı kapatıldı** — `fetchActivePoll` aktif yoklama yokken sızan poll/kadro state'ini temizliyor (A'da oyuncu/B'de kaptan sızıntısı).
-- [x] **Maç oluştur → geri** artık home'a gidiyor (yoklama ekranına değil).
-- [x] **Takımım kırmızı daire** — oy vermediğin aktif yoklaması olan takımların yanında.
-- [x] Sürüm 1.0.1'e yükseltildi, iOS build alındı.
+## Tamamlananlar (son oturum — 2026-07-24)
+- [x] **Nitelik girişi scroll zıplaması** — DÜZELTİLDİ + TEST EDİLDİ. `KeyboardAwareScrollView` otomatik kaydırması kapatıldı; `onLayout` y + odaklanınca üst-ortaya elle kaydırma.
+- [x] **Paylaşımda WhatsApp grup caption'ı düşürüyor** — DÜZELTİLDİ + TEST EDİLDİ. Maç bilgisi saha görselinin içine şerit olarak basılıyor (`FullField` `matchInfo` prop + `buildShareInfo()`).
+- [x] **Maç oluşturunca ana ekrana dön** — DÜZELTİLDİ + TEST EDİLDİ. "Yoklamayı Başlat" `setScreen('home')`.
+- [x] **Ana takım / "takımda değilsiniz" bug'ı** — DÜZELTİLDİ (kullanıcı test edecek). `fetchMyTeam` `.single()` kaldırıldı, kalıcı `@mainTeamId` mimarisi (tek takım otomatik, çok takım kalıcı ana takım; oluştur/katıl/ayrıl akışları güncellendi).
+- [x] **Maç otomatik bitince oylama gelmiyordu** — KÖK NEDEN + DÜZELTİLDİ (⏳ ileri saatli gerçek maçla doğrulanacak — Bilinen Buglar'a bakılacak). `fetchActivePoll` zaman aşımında `is_finished`+`finished_at` yazıyor; pull-to-refresh'e `fetchOpenRatingMatch` eklendi.
 
 ## Tamamlananlar (önceki oturumlar)
-- [x] Mevki bazlı nitelik sistemi + ağırlıklı OVR; "vizyon"/"hareketlilik" kaldırıldı
-- [x] measureLayout hatası (KeyboardAwareScrollView); maç saati 24 saat
-- [x] Maç sonu istatistik şema blokajı; oyuncu rol etiketi; toplam gol; misafir kadroya girişi
+- [x] Nitelik sistemi sadeleştirildi (saha 6 ortak + kaleci 6; ikincil mevki set eklemez); Kondisyon=çarpan; OVR ikincil harman; `migrateAttributeNames`.
+- [x] Maç-sonu oylama sistemi (player_ratings migration; UI + kademeli OVR + atomik guard).
+- [x] Takım scope açığı kapatıldı; maç oluştur→geri home; Takımım kırmızı daire; 1.0.1 iOS build.
+- [x] Mevki bazlı nitelik + ağırlıklı OVR; measureLayout hatası; maç saati 24 saat; maç sonu istatistik; misafir kadroya girişi.
