@@ -7,7 +7,7 @@
 - **Proje**: Halı saha (amatör futbol) takım yönetim uygulaması
 - **Stack**: Expo (React Native) + Supabase
 - **Mimari**: Tek dosyada SPA-tarzı state navigasyonu — `app/(tabs)/index.tsx` (~5300 satır)
-- **Dağıtım**: iOS TestFlight'ta yayında. Şu an **1.0.1 / build #6** EAS'te derlendi; TestFlight submit'i bekliyor (bkz. Devam Eden). Android build sürüyor.
+- **Dağıtım**: iOS TestFlight'ta yayında. Şu an **1.0.3 / build #8** EAS'te derlendi ve App Store Connect'e **başarıyla submit edildi** (Apple "Processing" sürecinde). Otomatik submit artık sorunsuz: `eas.json`'da `ascAppId: 169829` ekli → `eas build -p ios --profile production --auto-submit --non-interactive` tek komutla build+submit yapıyor. Android build sürüyor.
 - **KRİTİK / yayın öncesi**: RLS (Row Level Security) hâlâ KAPALI — public yayından önceki en büyük iş. Tablolar: profiles, teams, team_members, polls, poll_votes, guest_players, notifications, team_invites, match_lineups, player_ratings.
 
 ## Oturmuş Sistemler (çalışıyor)
@@ -25,13 +25,12 @@
 - Çok takımlı kullanım: takım scope'u artık düzgün izole (scope açığı kapandı)
 - **Ana takım seçimi**: Kalıcı `@mainTeamId` — tek takımda otomatik, çok takımda seçili ana takım gösterilir (aşağıda mimari not)
 
-## Son Oturumda Yapılanlar (2026-07-24)
-- **Maç otomatik bitince oylama gelmiyordu** → düzeltildi (bkz. Maç-Sonu Oylama Mimarisi; ⏳ ileri saatli gerçek maçla doğrulanacak).
-- **Pull-to-refresh'te oylama gelmiyordu** → `onRefresh` home dalına `fetchOpenRatingMatch`+`fetchTeamAlerts` eklendi.
-- **Nitelik girişi scroll zıplaması** → düzeltildi ve TEST EDİLDİ. `KeyboardAwareScrollView`'ın modal+maxHeight içindeki otomatik kaydırması listeyi tepeye atıyordu; `enableAutomaticScroll={false}` + her alanın `onLayout` y'siyle odaklanınca üst-ortaya elle kaydırma (measureLayout yok → crash yok).
-- **Paylaşımda WhatsApp grup caption'ı düşürüyor** → maç bilgisi artık paylaşılan SAHA GÖRSELİNİN içine şerit olarak basılıyor (`FullField`'a `matchInfo` prop'u + `buildShareInfo()`). TEST EDİLDİ, çalışıyor.
-- **Maç oluşturunca ana ekrana dön** → "Yoklamayı Başlat" `setScreen('votes')` yerine `setScreen('home')`. TEST EDİLDİ.
-- **Ana takım / "takımda değilsiniz" bug'ı** → `fetchMyTeam` `.single()` kaldırıldı, `@mainTeamId` mimarisi kuruldu (aşağıda not).
+## Son Oturumda Yapılanlar (2026-07-30/31)
+- **TestFlight rebuild** → `app.json` version 1.0.2 → **1.0.3**, commit+push. `eas build -p ios --profile production --auto-submit --non-interactive` çalıştırıldı: build #8 alındı, App Store Connect'e **başarıyla submit edildi** (Apple işlemede). Önceki oturumda kapatılan `ascAppId` (169829) sayesinde non-interactive submit sorunsuz çalıştı.
+  - Not: Log'da bir Apple 401 uyarısı çıktı ama sorun olmadı — EAS kayıtlı ASC API Key ile devam etti, credential'lar (sertifika + provisioning profile) hazırdı.
+
+## Geçmiş Oturumlar (özet)
+- **2026-07-24**: Maç otomatik bitince oylama gelmeme bug'ı kök nedeni bulundu+düzeltildi (⏳ hâlâ ileri saatli gerçek maçla doğrulanacak — Bilinen Buglar'a bak); pull-to-refresh'e `fetchOpenRatingMatch` eklendi; nitelik girişi scroll zıplaması (KeyboardAware otomatik kaydırma kapatıldı, onLayout y ile elle kaydırma); paylaşımda maç bilgisi saha görseline şerit olarak basıldı; maç oluşturunca home'a dönüş; ana takım / "takımda değilsiniz" bug'ı (`fetchMyTeam` `.single()` kaldırıldı, `@mainTeamId` mimarisi).
 
 ## Mevki / Nitelik Mimarisi (kalıcı notlar — GÜNCEL)
 Bu bölüm bu oturumda TAMAMEN yenilendi. Eski "ortak + primary + secondary union" modeli KALDIRILDI.
@@ -62,7 +61,7 @@ Bu bölüm bu oturumda TAMAMEN yenilendi. Eski "ortak + primary + secondary unio
 - Takımdan ayrılma (`leave_team`): ayrılan ana takımsa `@mainTeamId` silinir, `fetchMyTeam` tekrar çağrılır → kalan takıma otomatik geçer (reload gerekmez).
 
 ## Devam Eden / Yarım Kalan İş
-- **TestFlight submit (1.0.1 / build #6)**: EAS build çalıştı ama `--auto-submit` `eas.json`'da `ascAppId` olmadığı için `--non-interactive`'te takıldı. İlk iş: build bitince ya `! eas submit -p ios --latest` (interaktif, bundle'dan bulur) ya da `eas.json` submit.production'a `ascAppId` ekleyip non-interactive gönder. (ascAppId = App Store Connect → uygulama → App Information → "Apple ID" numarası.)
+- **⏳ TestFlight işleme (1.0.3 / build #8)**: Apple "Processing" bitince TestFlight'ta test edilebilir olur (email gelecek). https://appstoreconnect.apple.com/apps/169829/testflight/ios
 - **⏳ HATIRLAT — otomatik maç-sonu oylama doğrulaması**: Otomatik bitiş düzeltmesi kodlandı ama geçmişe-dönük kurulan maçta tetiklenmiyor gibi. Kullanıcı **ileri saatli gerçek bir maç** kurup saati geçince oylamanın otomatik geldiğini doğrulayacak. Test aşamasındaki arkadaşlardan da feedback alınacak. (Bu oturumda unutmadan hatırlat.)
 
 ## Çalışma Tarzı / Tercihler
