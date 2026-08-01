@@ -50,7 +50,7 @@
       [
         "expo-image-picker",
         {
-          "photosPermission": "Uygulamamızın profilini kişiselleştirmek için seçtiğin fotoğraflara erişmesi gerekiyor."
+          "photosPermission": "Profil fotoğrafı ve takım logosu seçebilmen için galerine erişmemiz gerekiyor."
         }
       ]
     ],
