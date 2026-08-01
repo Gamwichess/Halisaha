@@ -7,7 +7,7 @@
 - **Proje**: Halı saha (amatör futbol) takım yönetim uygulaması
 - **Stack**: Expo (React Native) + Supabase
 - **Mimari**: Tek dosyada SPA-tarzı state navigasyonu — `app/(tabs)/index.tsx` (~5600 satır)
-- **Dağıtım**: iOS TestFlight'ta yayında. Son build **1.0.5 / build #9** — EAS'te derlendi, App Store Connect'e **başarıyla submit edildi** (Apple "Processing"). Build ID `b9d581fe`. Bu build, aşağıdaki tüm yeni özellikleri ilk kez test cihazlarına taşıyor. `eas.json`'da `ascAppId: 169829` ekli → `eas build -p ios --profile production --auto-submit --non-interactive` tek komutla build+submit yapıyor. `/guncelle` artık sürümü sormadan patch +1 yapıp commit/push ediyor.
+- **Dağıtım**: iOS TestFlight'ta yayında. Son build **1.0.5 / build #9** (build ID `b9d581fe`), commit `118721e`'den alındı. ⚠️ **Bu build'den SONRA iki özellik daha eklendi ve build'e GİRMEDİ**: eksik kadroyu yedeklerden otomatik tamamlama + oyuncu çıkarma/joker silme. Yeni `/guncelle` gerekiyor. `eas.json`'da `ascAppId: 169829` ekli → `eas build -p ios --profile production --auto-submit --non-interactive` tek komutla build+submit yapıyor. `/guncelle` artık sürümü sormadan patch +1 yapıp commit/push ediyor.
 - **KRİTİK / yayın öncesi**: RLS (Row Level Security) hâlâ KAPALI — public yayından önceki en büyük iş. Tablolar: profiles, teams, team_members, polls, poll_votes, guest_players, notifications, team_invites, match_lineups, player_ratings.
 
 ## Oturmuş Sistemler (çalışıyor)
@@ -40,6 +40,8 @@
 9. **Sürüm 1.0.4 + `/guncelle` düzeltmesi** — komut artık sürümü sormadan patch +1 yapıp commit/push ediyor (`.claude/commands/guncelle.md`).
 10. **`/checkpoint` komutu + ilk checkpoint** — `checkpoint-2026-08-01-01` tag'i atıldı ve push edildi.
 11. **TestFlight build 1.0.5 / #9** — sürüm 1.0.4→1.0.5, build alındı ve submit edildi. Non-interactive submit sorunsuz, bu sefer Apple 401 uyarısı da çıkmadı.
+12. **Eksik kadroyu yedeklerden otomatik tamamlama** (`fillFieldPool`) — aşağıda mimari not.
+13. **Oyuncu çıkarma / joker silme** — üye `⋯` menüsü yardımcıya açıldı (yetki devri kaptanda kaldı), jokerler için silme sıfırdan yazıldı. Migration `20260801160000_guest_soft_delete.sql` — **HENÜZ UYGULANMADI.**
 
 ## Geçmiş Oturumlar (özet)
 - **2026-07-30/31**: TestFlight rebuild 1.0.2→1.0.3, build #8 alındı ve `--auto-submit --non-interactive` ile ASC'ye submit edildi (`ascAppId: 169829` sayesinde sorunsuz).
@@ -77,6 +79,23 @@
 
 **Doğrulanmış senaryolar:** 30 Temmuz gerçek havuzu → 2-3-1 (kullanıcının elle yaptığı). 4 DEF + 4 ORT + 4 FOR (ikincili Forvet Arkası) → 2-3-1 (2-2-2'ye kaçmıyor). 8 FOR + 4 DEF, hiç orta saha/ikincil yok → 2-2-2 (gerçekten başka seçenek yokken doğru).
 
+## Kadro Doldurma Mimarisi (kalıcı notlar — YENİ)
+- **Sorun**: `yesSorted.slice(0, fieldCapacity)` — "Kesin Var" sayısı formasyon kapasitesinden azsa saha eksik kuruluyordu ve `subPool` (Yedek oyu verenler + kulübedekiler) hiç kullanılmıyordu.
+- **Çözüm `fillFieldPool(base, reserves, capacity, formation)`**: kapasite dolu/aşkınsa mevkiye göre dengeli kesit sahada kalır, fazlası yedeğe; kapasite DOLMAZSA eksik slotlar yedek havuzundan doldurulur.
+- **Seçim güce göre DEĞİL mevki ihtiyacına göre**: formasyonun iki takım için istediği slot sayısından (`{KL:2, DEF:def*2, ORT:ort*2, FOR:forv*2}`) eldekiler düşülür; en büyük açığı olan kovadan, o kovaya en uygun oyuncu alınır (`posScore` — ana mevki > ikincil > ham uyum). Tüm kovalar kapanıp hâlâ boşluk varsa en yüksek OVR.
+- **Denge neden bozulmuyor**: (a) doldurma mevki açığını kapatıyor, havuz düzgün gidiyor; (b) güç dengesi zaten sonraki aşamada `buildTeamVariants` iki takıma dağıtırken kuruluyor; (c) kapasite çift sayı olduğu için takımlar eşit çıkıyor.
+- Mevki ihtiyacı hesabında `defaultFormationFor(match.teamSize)` kullanılır — nihai formasyon zaten sonra, DOLMUŞ havuza bakılarak `suggestFormation` ile seçilir.
+- Yedekten sahaya alınanlar kaptana isim isim Alert ile bildirilir (sessizce olmaz).
+
+## Oyuncu Çıkarma / Joker Silme (kalıcı notlar — YENİ)
+- **Üyeler**: `⋯` menüsü artık `amIManager` (kaptan + yardımcı). Ama **yetki devri işlemleri SADECE kaptanda** — "yardımcı kaptan yap", "yetkisini al", "kaptanlığı devret" `isCaptain` koşullu; aksi halde yardımcı kendini kaptan yapabilirdi. Yardımcı kaptanı takımdan çıkaramaz.
+- **Jokerler İKİ MODLU silinir** — çünkü `match_lineups.guest_id → guest_players(id)` FK'sı **VAR** (PostgREST embed ile doğrulandı):
+  - Hiç `match_lineups`/`player_ratings` kaydı yoksa → **sert silme** (yanlış eklenen joker için doğru davranış).
+  - Geçmişi varsa → **yumuşak silme** (`is_active = false`). Sert silmek geçmiş kadro satırlarını uçururdu; o satırlar hem maç geçmişi hem de **takım çeşitliliği algoritmasının "kim kiminle oynadı" verisi** (`fetchPairWeights` son 3 maçı okuyor).
+  - Onay ekranı hangi modun çalışacağını kullanıcıya yazar.
+- **`is_active` filtresi SORGUDA DEĞİL İSTEMCİDE** (`fetchGuestPlayers` içinde `.filter(g => g.is_active !== false)`). Sebep: takım kimliğinde `logo_url`'ü select'e koyunca migration'sız DB'de sorgu komple patlamış ve liste boşalmıştı. Aynı hataya düşmemek için kolon bağımlılığı sorgudan çıkarıldı.
+- Silinen joker `savedTeamA/B/Substitutes`'tan da düşürülür — bayat kadro kalmasın.
+
 ## Takım Kimliği Mimarisi (kalıcı notlar — YENİ)
 - **Şema**: `teams.logo_url` (text) + `teams.color` (text, hex). Migration `20260801120000_team_identity.sql` — kolonlar + `team_logos` public bucket + `storage.objects` policy'leri. **Uygulandı.**
 - ⚠️ `storage.objects`'te RLS uygulama tablolarından farklı olarak **varsayılan AÇIK**, o yüzden policy şart oldu. Şu anki policy'ler "giriş yapmış herkes yazabilir" seviyesinde — RLS turunda "sadece o takımın kaptanı/yardımcısı `teamId/` klasörüne yazar" diye daraltılacak.
@@ -106,7 +125,9 @@
 - `switchTeam` / `handleCreateTeam` / `handleAcceptInvite` seçilen takımı `@mainTeamId`'ye yazar. Ayrılınan takım ana takımsa anahtar silinir, `fetchMyTeam` tekrar çağrılır.
 
 ## Devam Eden / Yarım Kalan İş
-- **⏳ İLK İŞ — 1.0.5 / #9 TestFlight'ta test edilecek.** Bu build birçok özelliği İLK KEZ test cihazlarına taşıdı. Kullanıcı + test arkadaşlarından feedback beklenecek. Test EDİLMEYEN listesi:
+- **⏳ İLK İŞ — bekleyen migration uygulanacak**: `npx supabase db push` → `20260801160000_guest_soft_delete.sql` (`guest_players.is_active`). Uygulanmadan geçmişi olan joker silinemez. (Kod migration'sız da çalışır, liste patlamaz — ama silme yarım kalır.)
+- **⏳ Yeni TestFlight build gerekiyor**: build #9 commit `118721e`'den alındı; ondan sonraki iki özellik (yedeklerden otomatik kadro tamamlama, oyuncu çıkarma/joker silme) test cihazlarında YOK. Migration uygulanıp test edilince `/guncelle`.
+- **⏳ 1.0.5 / #9 TestFlight'ta test edilecek.** Bu build birçok özelliği İLK KEZ test cihazlarına taşıdı. Kullanıcı + test arkadaşlarından feedback beklenecek. Test EDİLMEYEN listesi:
   - (a) Nitelik formu scroll'u — Kondisyon klavye altında kalıyor mu, boşluğa tıklayınca zıplıyor mu
   - (b) V1/V2/V3 varyasyon geçişi — sahada anlık değişiyor mu, formasyonu bozmuyor mu
   - (c) Otomatik formasyon önerisi — gerçek yoklamada makul mü (maç kurarken artık formasyon SORULMUYOR)

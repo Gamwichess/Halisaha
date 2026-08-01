@@ -3,6 +3,10 @@
 > `/baslat` ile okunur, `/bitir` ile güncellenir. "Sonraya / Erken" bölümü = unutturma notları.
 
 ## Aktif (şu an üstünde çalışılan)
+- [ ] **⏳ Bekleyen migration**: `! npx supabase db push` → `20260801160000_guest_soft_delete.sql` (`guest_players.is_active`). Uygulanmadan geçmişi olan joker silinemez. Kod migration'sız da çalışır (filtre istemcide), liste patlamaz.
+- [ ] **⏳ Build #9'da OLMAYAN iki özellik** — test edilip yeni build alınacak (`/guncelle`):
+  - **Eksik kadroyu yedeklerden otomatik tamamlama**: "Kesin Var" kapasiteden azken saha yedeklerle doluyor mu, mevki dağılımı mantıklı mı, "Kadro Yedeklerle Tamamlandı" uyarısı çıkıyor mu
+  - **Oyuncu çıkarma**: yardımcı hesapla `⋯` menüsü açılıyor mu ve yetki devri seçenekleri GİZLİ mi; joker silme iki modu da (geçmişli/geçmişsiz) doğru mesajı veriyor mu
 - [ ] **⏳ 1.0.5 / build #9 TestFlight'ta test edilecek** — submit başarılı, Apple "Processing". Bu build aşağıdakileri İLK KEZ test cihazlarına taşıdı; kendin + test arkadaşlarından feedback al:
   - Nitelik formu: Kondisyon klavyenin altında kalıyor mu, boşluğa tıklayınca zıplıyor mu
   - Profil + profil tamamlama: 6 mevki geliyor mu (Ön Libero / Forvet Arkası)
@@ -19,12 +23,6 @@
 - [ ] **`match_lineups`'a hiç `bench` satırı yazılmamış** — bu oturumda veri incelenirken fark edildi: 24 açıklanmış kadronun HEPSİ sadece `lineup='field'`, tek bir bench satırı yok. DURUM.md eskiden "field/bench yazılır" diyordu ama veri öyle demiyor. Yukarıdaki yedek yerleştirme maddesiyle ilgili olabilir — `saveLineupToSupabase`'e bakılacak.
 
 ## Sıradaki İşler (acelesi yok ama sırada)
-- [ ] **Takımım'da oyuncu silme/atma — kaptan + yardımcıya açılsın**. İstenen: hem **Kemik Kadro** hem **Jokerler** sekmesinden oyuncu silinebilsin/atılabilsin.
-  Mevcut durum (işe başlarken buradan devam et):
-  - Üyeler için `showMemberActionMenu` VAR (`index.tsx:3488`) ve içinde "Takımdan çıkar 🚪" (`handleRemoveMember`) mevcut — ama menü **yalnızca `isCaptain`** koşuluyla açılıyor (üye listesindeki `⋯` butonu). **`amIManager` yapılmalı** ki yardımcı da kullanabilsin.
-  - Yardımcı için hangi işlemler açık olmalı, karar gerekiyor: "Kaptanlığı devret" ve "Yardımcı kaptan yap" muhtemelen kaptana özel kalmalı; yalnızca "Takımdan çıkar" yardımcıya açılmalı.
-  - **Jokerler (misafir) için silme HİÇ YOK** — `guest_players` tablosundan silen bir fonksiyon yok, sıfırdan yazılacak (`handleDeleteGuest` + joker kartında `⋯`/uzun bas menüsü).
-  - ⚠️ Misafir silinince `match_lineups` / `player_ratings` içindeki `guest_id` referanslarına ne olacağına bakılmalı (cascade var mı, yoksa geçmiş kadrolar bozulur mu).
 - [ ] **Oyuncu detay menüsü UI**: Oyuncuya tıklayınca açılan menü referans görseldeki gibi görünmeli — mevcut UI kötü. (⚠️ Referans görsel işe başlarken kullanıcıdan alınacak — görsel olmadan başlanamaz.)
 - [ ] **Maç hatırlatıcı bildirimi**: Maç saati yaklaşınca push/local bildirim. Kaç saat önce ve açık/kapalı kullanıcı ayarı olmalı. (expo-notifications local schedule; ayar `@pollSettings` benzeri saklanır.)
 
@@ -43,6 +41,9 @@
 - [ ] **Supabase pause**: free tier 7 günde bir duraklıyor. Haftada 1 manuel dashboard girişiyle idare. Launch'a yakın Pro'ya geçiş düşünülebilir.
 
 ## Tamamlananlar (2026-07-31 / 08-01)
+- [x] **Eksik kadroyu yedeklerden otomatik tamamlama** (`fillFieldPool`) — "Kesin Var" kapasiteden azken saha eksik kuruluyordu ve yedekler hiç kullanılmıyordu. Artık mevki ihtiyacına göre dolduruluyor; denge `buildTeamVariants` aşamasında zaten kuruluyor. Gerçek veriyle test edildi (9/11/14 kişilik senaryolar).
+- [x] **Takımım'da oyuncu çıkarma** — üye `⋯` menüsü `amIManager`'a açıldı; yetki devri işlemleri (yardımcı yap / yetkisini al / kaptanlığı devret) kaptanda kaldı, yardımcı kaptanı çıkaramıyor.
+- [x] **Joker (misafir) silme** — sıfırdan yazıldı, iki modlu: geçmişi olmayan sert, geçmişi olan yumuşak (`is_active=false`). `match_lineups.guest_id` FK'sı doğrulandı; sert silme geçmiş kadroları ve çeşitlilik algoritmasının verisini bozardı. Migration `20260801160000_guest_soft_delete.sql`.
 - [x] **Takım kimliği: logo + isim + marka rengi** — TEST EDİLDİ, ÇALIŞIYOR. Migration uygulandı (`teams.logo_url`, `teams.color`, `team_logos` public bucket + policy'ler). Logo yükleme `expo-image-picker` base64 → Storage; `expo-file-system` kullanılmadı (SDK 54'te API değişti). `TeamLogo` bileşeni 4 yerde. Düzenleme kaptan + yardımcıya açık.
 - [x] **Takım listesi boş kalma bug'ı** — DÜZELTİLDİ. `fetchUserTeams` yeni kolonları isteyince migration'sız DB'de sorgu komple hata verip Takımım menüsünü boşaltıyordu; hata artık loglanıyor ve kimliksiz select'e geri düşülüyor.
 - [x] **`/guncelle` her seferinde sürüm bump'lıyor** — artık sormuyor, patch +1 yapıp commit/push ediyor. Sürüm 1.0.4.
