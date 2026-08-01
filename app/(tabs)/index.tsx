@@ -23,7 +23,6 @@ import {
   TouchableOpacity, View,
 } from 'react-native';
 import { Calendar, LocaleConfig } from 'react-native-calendars';
-import { KeyboardAwareScrollView } from 'react-native-keyboard-aware-scroll-view';
 import MapView, { Marker } from 'react-native-maps';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import Svg, { Circle, Line, Rect } from 'react-native-svg';
@@ -140,6 +139,14 @@ const SKILL_POSITIONS: { code: SkillPosition; label: string }[] = [
 const SKILL_POSITION_LABELS: Record<SkillPosition, string> =
   Object.fromEntries(SKILL_POSITIONS.map(p => [p.code, p.label])) as Record<SkillPosition, string>;
 
+// Mevki gösterimi. Yeni kayıtlar SkillPosition KODU tutar (ON_LIBERO…) →
+// okunur etikete çevrilir. Eski kayıtlarda ham metin olabilir (KL/DEF/ORT/FOR)
+// → olduğu gibi gösterilir. Boşsa '—'.
+function positionLabel(v?: string | null): string {
+  if (!v) return '—';
+  return SKILL_POSITION_LABELS[v as SkillPosition] ?? v;
+}
+
 // ── NİTELİK SİSTEMİ (sadeleştirilmiş) ────────────────────────────────────────
 // Saha oyuncularının HEPSİ aynı 6 niteliğe sahiptir; mevkiye göre fark yalnızca
 // OVR AĞIRLIĞINDADIR (defansın şutu da girilir/oylanır ama OVR'ına az katkı
@@ -211,7 +218,7 @@ const POSITION_WEIGHTS: Record<SkillPosition, Record<string, number>> = {
 
 // Pozisyon bazlı nitelik sisteminin 6 mevkisini, saha yerleşimi/formasyon
 // tarafında kullanılan eski 4'lü `Position` (KL/DEF/ORT/FOR) kovasına
-// eşler — "Dengeli Kur"/"Rastgele Kur" bu kovayı kullanarak slot atar.
+// eşler — "Kadroları Kur" bu kovayı kullanarak slot atar.
 const SKILL_TO_FIELD_SLOT: Record<SkillPosition, Position> = {
   KALECI:        'KL',
   DEFANS:        'DEF',
@@ -336,6 +343,65 @@ function defaultFormationFor(teamSize?: number): Formation {
 function effectiveFormation(m: MatchInfo): Formation {
   const allowed = formationsForTeamSize(m.teamSize);
   return m.formation && allowed.includes(m.formation) ? m.formation : allowed[0];
+}
+
+// ─── OTOMATİK FORMASYON ÖNERİSİ ──────────────────────────────────────────
+// Maç kurulurken formasyon seçmek işe yaramıyordu: o an kimin geleceği belli
+// değil. 3-2-1 seçilip sahaya 4 net defans (takım başına 2) çıkınca üçüncü DEF
+// slotunu forvet dolduruyordu. Bu yüzden formasyon artık GERÇEK havuza bakılarak
+// kadro kurulurken seçilir.
+//
+// Maliyet mantığı:
+//  - EKSİK (slot > arz) kötü; ikincil mevkisi o kovaya uyan biriyle kapanıyorsa
+//    ucuz, kimse uymuyorsa pahalı.
+//  - FAZLA (arz > slot) daha az kötü — oyuncu başka çizgide oynar.
+//  - Defans eksiği orta saha/forvet eksiğinden DAHA pahalı: forvetin defansta
+//    oynaması, defansın ileride oynamasından daha çok zarar veriyor.
+//  - Çift forvet ayrıca cezalı: 4 forvet var diye 2-2-2'ye geçmek yerine,
+//    forvet arkası/ikincil orta saha oynayabilenlerle 2-3-1 tercih edilir.
+const SHORTAGE_WEIGHT: Record<Position, number> = { KL: 1, DEF: 1.5, ORT: 1, FOR: 1 };
+const SECONDARY_COVER_COST = 1;   // eksik, ikincil mevkiyle kapanıyorsa
+const NO_COVER_COST        = 3;   // eksik, kimse o mevkiyi oynayamıyorsa
+const SURPLUS_COST         = 0.5; // fazlalık (oyuncu başka çizgide oynar)
+const EXTRA_STRIKER_COST   = 3;   // 1'den fazla forvet slotu başına
+
+// Forvet Arkası saha kovası olarak FOR sayılır (SKILL_TO_FIELD_SLOT) ama
+// pratikte orta saha çizgisini de doldurabilir — 2-3-1'in "3"ü buradan çıkıyor.
+function canCover(p: PlayerInfo, pos: Position): boolean {
+  if (p.secPos === pos) return true;
+  if (pos !== 'ORT') return false;
+  const raw = [(p as any)._rawPrimary, (p as any)._rawSecondary];
+  return raw.includes('FORVET_ARKASI') || raw.includes('ORTA_SAHA');
+}
+
+function suggestFormation(pool: PlayerInfo[], teamSize?: number): Formation {
+  const candidates = formationsForTeamSize(teamSize);
+  const { outfield } = getGoaliesAndOutfield(pool);
+  if (outfield.length === 0) return candidates[0];
+
+  // Havuz iki takıma bölünecek → takım başına arz
+  const supply = (pos: Position) => outfield.filter(p => p.pos === pos).length / 2;
+  const cover  = (pos: Position) => outfield.filter(p => p.pos !== pos && canCover(p, pos)).length / 2;
+
+  let best = candidates[0];
+  let bestCost = Infinity;
+  for (const f of candidates) {
+    const { def, ort, forv } = parseFormation(f);
+    const need: Record<string, number> = { DEF: def, ORT: ort, FOR: forv };
+    let cost = forv > 1 ? (forv - 1) * EXTRA_STRIKER_COST : 0;
+    (['DEF', 'ORT', 'FOR'] as Position[]).forEach(pos => {
+      const have = supply(pos);
+      if (need[pos] > have) {
+        const gap      = need[pos] - have;
+        const covered  = Math.min(gap, cover(pos));
+        cost += SHORTAGE_WEIGHT[pos] * (covered * SECONDARY_COVER_COST + (gap - covered) * NO_COVER_COST);
+      } else {
+        cost += (have - need[pos]) * SURPLUS_COST;
+      }
+    });
+    if (cost < bestCost - 1e-9) { bestCost = cost; best = f; }
+  }
+  return best;
 }
 
 const INITIAL_PLAYERS: PlayerInfo[] = [
@@ -544,7 +610,189 @@ function applyFormation(team: PlayerInfo[], formation: Formation): FieldPlayer[]
   return result;
 }
 
-function buildBalancedTeams(pool: PlayerInfo[], formation: Formation) {
+// ─── TAKIM ÇEŞİTLİLİĞİ ────────────────────────────────────────────────────
+// Sorun: kadro kurma TAMAMEN deterministikti (oyuncular rating'e göre sıralanıp
+// hep `scoreA <= scoreB` kuralıyla dağıtılıyordu) → aynı havuz + aynı formasyon
+// her zaman BİREBİR aynı kadroyu veriyordu. Üstüne güç dengesi tek başına da
+// aynı ikilileri tekrar tekrar bir araya getirmeye eğilimli. Sonuç: aynı çekirdek
+// her hafta aynı tarafta oynuyordu.
+//
+// Çözüm: son maçların açıklanmış kadrolarına bakıp "bu ikili yine aynı takımda"
+// durumunu MALİYET olarak cezalandırmak; sonra dengeli kurulmuş kadro üzerinde
+// aynı mevki kovasındaki oyuncuları takas ederek maliyeti düşürmek.
+const PAIR_HISTORY_MATCHES = 3;   // geçmişte kaç maça bakılır
+const PAIR_DECAY           = 0.65; // son maç 1.0, önceki 0.65, ondan önceki ~0.42
+type DiversityLevel = 'off' | 'mid' | 'high';
+// λ = "bir tam tekrar-ikili kaç OVR'lık dengesizliğe bedel". off = eski davranış.
+const DIVERSITY_LAMBDA: Record<DiversityLevel, number> = { off: 0, mid: 8, high: 20 };
+const VARIANT_COUNT    = 3;   // her turda kaç varyasyon sunulur
+const VARIANT_RESTARTS = 150; // rastgele başlangıçlı tırmanış sayısı
+// Aday kabul bandı (OVR puanı cinsinden). En iyi çözümden bu kadar sapan
+// kadrolar da "yeterince iyi" sayılıp seçeneklere girer — havuz dar olduğunda
+// tek/çok az varyasyon çıkmasını bu önlüyor.
+const VARIANT_SPREAD = 15;
+
+// Varyasyon HAM bölünme olarak saklanır (kim hangi takımda), diziliş değil.
+// Formasyon uygulama anında geçerli formationA/formationB ile yapılır; aksi
+// halde V2'ye geçince saha görünümünde elle değiştirilen formasyon sıfırlanıyordu.
+type TeamVariant = { rawA: PlayerInfo[]; rawB: PlayerInfo[]; sig: string; cost: number };
+
+// Bir bölünmenin kimliği. A/B etiketleri keyfi — tarafları yer değişmiş aynı
+// bölünme AYNI kadrodur, iki varyasyon sayılmamalı. Bu yüzden kanonik imza:
+// iki tarafın sıralı id listelerinden alfabetik küçük olanı başa alınır.
+function splitSignature(A: PlayerInfo[], B: PlayerInfo[]): string {
+  const a = A.map(p => p.id).sort().join(',');
+  const b = B.map(p => p.id).sort().join(',');
+  return a < b ? `${a}#${b}` : `${b}#${a}`;
+}
+const DIVERSITY_LABELS: Record<DiversityLevel, string> = { off: 'Kapalı', mid: 'Orta', high: 'Yüksek' };
+
+type PairWeights = Record<string, number>;
+const pairKey = (a: string, b: string) => (a < b ? `${a}|${b}` : `${b}|${a}`);
+
+// Geçmiş kadro satırlarından ikili birliktelik ağırlıkları.
+// pollOrder: en YENİ maç 0. sırada — indeks büyüdükçe ağırlık üstel azalır.
+function buildPairWeights(
+  rows: { pollId: string; side: string | null; playerId: string | null }[],
+  pollOrder: string[],
+): PairWeights {
+  const w: PairWeights = {};
+  pollOrder.forEach((pid, idx) => {
+    const decay = Math.pow(PAIR_DECAY, idx);
+    (['A', 'B'] as const).forEach(side => {
+      const ids = rows
+        .filter(r => r.pollId === pid && r.side === side && r.playerId)
+        .map(r => r.playerId as string);
+      for (let i = 0; i < ids.length; i++)
+        for (let j = i + 1; j < ids.length; j++) {
+          const k = pairKey(ids[i], ids[j]);
+          w[k] = (w[k] || 0) + decay;
+        }
+    });
+  });
+  return w;
+}
+
+// Bir takımdaki tüm ikililerin geçmiş ağırlığı toplamı = "ne kadar tanıdık kadro".
+function repeatScore(team: PlayerInfo[], w: PairWeights): number {
+  let s = 0;
+  for (let i = 0; i < team.length; i++)
+    for (let j = i + 1; j < team.length; j++) s += w[pairKey(team[i].id, team[j].id)] || 0;
+  return s;
+}
+
+function teamsCost(A: PlayerInfo[], B: PlayerInfo[], w: PairWeights, lambda: number): number {
+  const sum = (t: PlayerInfo[]) => t.reduce((n, p) => n + (p.rating || 0), 0);
+  return Math.abs(sum(A) - sum(B)) + lambda * (repeatScore(A, w) + repeatScore(B, w));
+}
+
+// Dengeli kurulmuş bölünme üzerinde YEREL ARAMA. Yalnızca AYNI mevki kovasındaki
+// (a.pos === b.pos) A↔B oyuncuları takas edilir → mevki kotası ve formasyon
+// yapısı hiç bozulmaz, sadece kimin kiminle oynadığı değişir. Kaleciler
+// (fieldPos='KL') sabit kalır — tek gerçek kaleci varsa takas kadroyu bozardı.
+// Rastgele başlangıçlı çoklu tırmanış BİRDEN ÇOK farklı yerel optimum toplar;
+// kaptan bunlar arasından (V1/V2/V3) seçer.
+function collectSplits(rawA: PlayerInfo[], rawB: PlayerInfo[], w: PairWeights, lambda: number) {
+  const isKL = (p: PlayerInfo) => (p as FieldPlayer).fieldPos === 'KL';
+  const swappable = (A: PlayerInfo[], B: PlayerInfo[]): [number, number][] => {
+    const out: [number, number][] = [];
+    A.forEach((a, i) => {
+      if (isKL(a)) return;
+      B.forEach((b, j) => { if (!isKL(b) && a.pos === b.pos) out.push([i, j]); });
+    });
+    return out;
+  };
+  const swap = (A: PlayerInfo[], B: PlayerInfo[], i: number, j: number) => {
+    const t = A[i]; A[i] = B[j]; B[j] = t;
+  };
+  // Aramanın gezdiği HER durum aday havuzuna girer — sadece tırmanış bitiş
+  // noktalarını (yerel optimum) toplamak çok az farklı kadro veriyordu.
+  const visited: { A: PlayerInfo[]; B: PlayerInfo[]; c: number }[] = [];
+  const record = (A: PlayerInfo[], B: PlayerInfo[]) =>
+    visited.push({ A: [...A], B: [...B], c: teamsCost(A, B, w, lambda) });
+
+  const climb = (A: PlayerInfo[], B: PlayerInfo[]) => {
+    for (let step = 0; step < 200; step++) {
+      record(A, B);
+      const base = teamsCost(A, B, w, lambda);
+      let bestGain = 1e-9;
+      let bestPair: [number, number] | null = null;
+      for (const [i, j] of swappable(A, B)) {
+        const A2 = [...A], B2 = [...B];
+        swap(A2, B2, i, j);
+        const gain = base - teamsCost(A2, B2, w, lambda);
+        if (gain > bestGain + 1e-9) { bestGain = gain; bestPair = [i, j]; }
+        // Eşit kazançta rastgele seç → aynı havuzda hep aynı sonuca kilitlenme
+        else if (bestPair && Math.abs(gain - bestGain) < 1e-9 && Math.random() < 0.5) bestPair = [i, j];
+      }
+      if (!bestPair) break;
+      swap(A, B, bestPair[0], bestPair[1]);
+    }
+  };
+
+  // Çok sayıda rastgele başlangıçlı tırmanış. 14 oyuncu için milisaniyeler
+  // sürer, bol tutmak sorun değil.
+  for (let r = 0; r < VARIANT_RESTARTS; r++) {
+    const A = [...rawA], B = [...rawB];
+    if (r > 0) {
+      // Rastgele başlangıç sarsıntısı — aramanın farklı bölgelere gitmesi için
+      const cand = swappable(A, B);
+      const n = 1 + Math.floor(Math.random() * 3);
+      for (let k = 0; k < n && cand.length > 0; k++) {
+        const [i, j] = cand[Math.floor(Math.random() * cand.length)];
+        swap(A, B, i, j);
+      }
+    }
+    climb(A, B);
+    record(A, B);
+  }
+  if (visited.length === 0) return [];
+
+  // En iyiden en fazla VARIANT_SPREAD sapan tüm FARKLI kadrolar aday olur.
+  // Sadece optimumu almak tek kadro, sadece yerel optimumları almak 4-6 kadro
+  // veriyordu; bu bant onlarca gerçek seçenek üretiyor ve hepsi hâlâ dengeli.
+  const minCost = Math.min(...visited.map(v => v.c));
+  const found = new Map<string, { A: PlayerInfo[]; B: PlayerInfo[]; c: number; sig: string }>();
+  for (const v of visited) {
+    if (v.c > minCost + VARIANT_SPREAD) continue;
+    const sig = splitSignature(v.A, v.B);
+    if (!found.has(sig)) found.set(sig, { ...v, sig });
+  }
+  return [...found.values()].sort((x, y) => x.c - y.c);
+}
+
+// Tek bir "en iyi" kadro yerine BİRBİRİNDEN FARKLI birkaç iyi kadro üretir.
+// excludeSigs = daha önce gösterilmiş varyasyonlar → "Yeni Varyasyonlar"
+// butonu aynı kadroları tekrar getirmesin. Havuz küçükse üretilebilecek farklı
+// varyasyon sayısı da sınırlıdır; o durumda daha az (hatta 0) sonuç döner.
+function buildTeamVariants(
+  pool: PlayerInfo[],
+  formation: Formation,
+  pairW: PairWeights = {},
+  lambda = 0,
+  count = VARIANT_COUNT,
+  excludeSigs: string[] = [],
+): TeamVariant[] {
+  const base = greedySplit(pool, formation);
+  const finish = (A: PlayerInfo[], B: PlayerInfo[], sig: string, cost: number): TeamVariant =>
+    ({ rawA: A, rawB: B, sig, cost });
+
+  // Çeşitlilik kapalı → tek, saf dengeli kadro (eski davranış).
+  if (lambda <= 0) {
+    const sig = splitSignature(base.rawA, base.rawB);
+    if (excludeSigs.includes(sig)) return [];
+    return [finish(base.rawA, base.rawB, sig, teamsCost(base.rawA, base.rawB, pairW, 0))];
+  }
+
+  return collectSplits(base.rawA, base.rawB, pairW, lambda)
+    .filter(r => !excludeSigs.includes(r.sig))
+    .slice(0, count)
+    .map(r => finish(r.A, r.B, r.sig, r.c));
+}
+
+// Güç dengesine + mevki kotasına göre ham bölünme. Çeşitlilik aramasının
+// BAŞLANGIÇ noktası; tek başına deterministiktir (aynı havuz → aynı bölünme).
+function greedySplit(pool: PlayerInfo[], formation: Formation) {
   const perTeam = teamSizeOf(formation);
   const { def, ort, forv } = parseFormation(formation);
   const quota: Record<string, number> = { DEF: def, ORT: ort, FOR: forv };
@@ -594,17 +842,7 @@ function buildBalancedTeams(pool: PlayerInfo[], formation: Formation) {
     else if (rawB.length < perTeam) pushB(p);
   });
 
-  return { teamA: applyFormation(rawA, formation), teamB: applyFormation(rawB, formation) };
-}
-
-function buildRandomTeams(pool: PlayerInfo[], formation: Formation) {
-  const perTeam = teamSizeOf(formation);
-  const { goalies, outfield } = getGoaliesAndOutfield(pool);
-  const rawA: PlayerInfo[] = goalies[0] ? [goalies[0]] : [];
-  const rawB: PlayerInfo[] = goalies[1] ? [goalies[1]] : [];
-  const shuffled = [...outfield].sort(() => Math.random() - 0.5);
-  shuffled.forEach(p => { if (rawA.length < perTeam) rawA.push(p); else if (rawB.length < perTeam) rawB.push(p); });
-  return { teamA: applyFormation(rawA, formation), teamB: applyFormation(rawB, formation) };
+  return { rawA, rawB };
 }
 
 // Yeni pozisyon sistemi (primary_position/secondary_position) doluysa onu
@@ -997,6 +1235,18 @@ export default function Index() {
   const [showAvatarModal, setShowAvatarModal] = useState(false);
   const [foot, setFoot]           = useState('Sağ');
 
+  // Kadro çeşitliliği — son maçlardan tekrar eden ikilileri ne kadar dağıtsın
+  const [diversity, setDiversity] = useState<DiversityLevel>('mid');
+  // Kadro varyasyonları: tek kadro yerine birkaç farklı seçenek üretilip
+  // kaptana sunulur (V1/V2/V3). variantSeen = bu turda daha önce gösterilmiş
+  // imzalar; "Yeni Varyasyonlar" aynılarını tekrar getirmesin diye.
+  const [teamVariants, setTeamVariants] = useState<TeamVariant[]>([]);
+  const [variantIndex, setVariantIndex] = useState(0);
+  const [variantSeen, setVariantSeen]   = useState<string[]>([]);
+  const [variantCtx, setVariantCtx]     = useState<
+    { subs: PlayerInfo[]; pool: PlayerInfo[]; formation: Formation; pairW: PairWeights; lambda: number } | null
+  >(null);
+
   // Yoklama ayarları
   const [pollSettings, setPollSettings] = useState<PollSettings>(DEFAULT_POLL_SETTINGS);
   const [showPollSettings, setShowPollSettings] = useState(false);
@@ -1031,7 +1281,6 @@ export default function Index() {
 
   const [showGuestAddModal, setShowGuestAddModal] = useState(false);
   const [newGuestName, setNewGuestName]         = useState('');
-  const [newGuestPos, setNewGuestPos]           = useState<'KL' | 'DEF' | 'ORT' | 'FOR'>('ORT');
   const [userTeams, setUserTeams]               = useState<any[]>([]);
   // teamId → o takımda oy vermediğin aktif yoklama var mı (Takımım'da kırmızı daire)
   const [teamAlerts, setTeamAlerts]             = useState<Record<string, boolean>>({});
@@ -1772,14 +2021,16 @@ export default function Index() {
       team_id: myTeamInfo.id,
       added_by: session.user.id,
       name: newGuestName.trim(),
-      position: newGuestPos,
+      // Mevki ekleme anında sorulmuyor — nitelik formunda primary_position ile
+      // belirleniyor. Buradaki legacy `position` yalnızca o form doldurulana
+      // kadarki saha kovası varsayılanı (resolveFieldPos zaten 'ORT'a düşer).
+      position: 'ORT',
       // Nitelikler boş başlar; kaptan "Nitelikleri Düzenle" ile girer.
       // Girilene kadar OVR mevkiye göre 60 civarı hesaplanır (computeOverall).
       attributes: {},
     });
     if (error) { Alert.alert('Hata', error.message); return; }
     setNewGuestName('');
-    setNewGuestPos('ORT');
     setShowGuestAddModal(false);
     await fetchGuestPlayers(myTeamInfo.id);
   }
@@ -1998,6 +2249,7 @@ export default function Index() {
         const sfa = await AsyncStorage.getItem('@formationA');
         const sfb = await AsyncStorage.getItem('@formationB');
         const sps = await AsyncStorage.getItem('@pollSettings');
+        const sdv = await AsyncStorage.getItem('@diversity');
 
         // Eski lokal oyuncu havuzunu temizle
         await AsyncStorage.removeItem('@players');
@@ -2009,6 +2261,7 @@ export default function Index() {
         if (sfa) setFormationA(JSON.parse(sfa));
         if (sfb) setFormationB(JSON.parse(sfb));
         if (sps) setPollSettings(JSON.parse(sps));
+        if (sdv && (sdv in DIVERSITY_LAMBDA)) setDiversity(sdv as DiversityLevel);
       } catch (e) { console.log(e); }
       finally { setIsReady(true); }
     };
@@ -2547,7 +2800,100 @@ export default function Index() {
     await saveLineupToSupabase(a, b, subs);
   }
 
-  async function handleBuildBalanced() {
+  // Son PAIR_HISTORY_MATCHES maçın açıklanmış kadrolarından ikili birliktelik
+  // ağırlıklarını çıkarır. İki kritik filtre:
+  //  - Aynı güne birden fazla poll kurulmuş olabilir (deneme/iptal). Her
+  //    tarihten YALNIZCA en son açıklanan kadro sayılır; yoksa tek bir maç günü
+  //    (ör. 24 Temmuz'daki 8 test poll'ü) tüm geçmişi domine eder.
+  //  - Şu anki maç hariç tutulur; yoksa kadro bir kez açıklandıktan sonra
+  //    yeniden kurmak kendi kendini cezalandırır.
+  async function fetchPairWeights(teamId: string, excludePollId?: string | null): Promise<PairWeights> {
+    try {
+      const { data: polls } = await supabase
+        .from('polls')
+        .select('id, match_date, created_at')
+        .eq('team_id', teamId)
+        .eq('teams_revealed', true)
+        .order('match_date', { ascending: false })
+        .order('created_at', { ascending: false });
+      if (!polls?.length) return {};
+
+      const seenDates = new Set<string>();
+      const pollOrder: string[] = [];
+      for (const p of polls) {
+        if (excludePollId && p.id === excludePollId) continue;
+        if (seenDates.has(p.match_date)) continue;
+        seenDates.add(p.match_date);
+        pollOrder.push(p.id);
+        if (pollOrder.length >= PAIR_HISTORY_MATCHES) break;
+      }
+      if (pollOrder.length === 0) return {};
+
+      const { data: rows } = await supabase
+        .from('match_lineups')
+        .select('poll_id, user_id, guest_id, side')
+        .in('poll_id', pollOrder);
+
+      return buildPairWeights(
+        (rows || []).map((r: any) => ({
+          pollId:   r.poll_id,
+          side:     r.side,
+          playerId: r.user_id || r.guest_id || null,
+        })),
+        pollOrder,
+      );
+    } catch (e) {
+      console.log('fetchPairWeights hatası:', e);
+      return {};
+    }
+  }
+
+  // Sunulan varyasyonlardan birine geçer. Yeniden hesap YOK — varyasyonlar
+  // zaten üretilmiş durumda, sadece hangisinin uygulanacağı değişiyor.
+  // Diziliş GEÇERLİ formasyonlarla kurulur — saha görünümünde formasyonu elle
+  // değiştirdiysen V2/V3'e geçmek onu bozmaz.
+  async function applyVariant(i: number) {
+    const v = teamVariants[i];
+    if (!v || !variantCtx) return;
+    setVariantIndex(i);
+    await commitTeams(
+      applyFormation(v.rawA, formationA),
+      applyFormation(v.rawB, formationB),
+      variantCtx.subs, formationA, formationB,
+    );
+    setSelectedForSwap(null);
+  }
+
+  // Daha önce gösterilmemiş yeni bir varyasyon turu üretir. Havuz küçükse
+  // üretilebilecek farklı kadro sayısı sınırlıdır — tükendiğinde kullanıcıya
+  // sessizce aynı kadroları göstermek yerine açıkça söylüyoruz.
+  async function handleMoreVariants() {
+    if (!variantCtx) return;
+    const { pool, formation, pairW, lambda } = variantCtx;
+    const fresh = buildTeamVariants(pool, formation, pairW, lambda, VARIANT_COUNT, variantSeen);
+    if (fresh.length === 0) {
+      Alert.alert(
+        'Varyasyon kalmadı',
+        'Bu oyuncu kadrosu ve mevki dağılımıyla üretilebilecek farklı varyasyonlar tükendi. Çeşitliliği "Yüksek" yaparak veya oyuncu havuzunu değiştirerek daha fazlasını deneyebilirsin.',
+      );
+      return;
+    }
+    setTeamVariants(fresh);
+    setVariantSeen(prev => [...prev, ...fresh.map(v => v.sig)]);
+    setVariantIndex(0);
+    await commitTeams(
+      applyFormation(fresh[0].rawA, formationA),
+      applyFormation(fresh[0].rawB, formationB),
+      variantCtx.subs, formationA, formationB,
+    );
+    setSelectedForSwap(null);
+  }
+
+  // Tek kadro kurma akışı — eski "Dengeli Kur" + "Rastgele Kur" birleşti.
+  // Çeşitlilik ayarı ikisinin arasındaki tüm skalayı kapsıyor:
+  //   Kapalı = saf dengeli (eski Dengeli Kur), Yüksek = geçmişi güçlü şekilde
+  //   dağıtan karışık kadro. Her basış farklı bir sonuç üretir.
+  async function handleBuildTeams() {
     if (!amIManager) return;
     if (myTeamMembers.length === 0) {
       Alert.alert('Uyarı', 'Takım üyeleri henüz yüklenmedi. Lütfen tekrar dene.');
@@ -2567,24 +2913,41 @@ export default function Index() {
     const yesPool = [...yesMembers, ...yesGuests];
     const subPool = [...subMembers, ...subGuests];
 
-    // Formasyon artık maçtan gelir (sabit '3-2-1' değil) — sahadaki slot
-    // yapısını ve kaç kişilik kadro kurulacağını bu belirler
-    const formation = effectiveFormation(match);
-    const fieldCapacity = teamSizeOf(formation) * 2;
+    // Kaç kişilik kadro kurulacağını maç FORMATI (6v6/7v7/8v8) belirler.
+    // Formasyonun kendisi aşağıda, sahaya çıkacak gerçek havuza bakılarak
+    // seçilir (suggestFormation) — maç kurulurken seçilen formasyon tutmuyordu.
+    const fieldCapacity = teamSizeOf(defaultFormationFor(match.teamSize)) * 2;
+
+    // Çeşitlilik kapalıysa geçmişi hiç çekme — gereksiz iki sorgu olmasın.
+    const lambda = DIVERSITY_LAMBDA[diversity];
+    const pairW = lambda > 0 && myTeamInfo?.id
+      ? await fetchPairWeights(myTeamInfo.id, activePollIdRef.current)
+      : {};
 
     const executeBuild = async (main: PlayerInfo[], subs: PlayerInfo[]) => {
       try {
-        const result = buildBalancedTeams(main, formation);
-        if (!result || !result.teamA || !result.teamB) {
+        // Formasyon sahaya çıkacak GERÇEK havuzdan seçilir; iki takım da aynı
+        // havuzdan bölündüğü için ikisine de aynı formasyon uygun düşer.
+        const formation = suggestFormation(main, match.teamSize);
+        const variants = buildTeamVariants(main, formation, pairW, lambda);
+        if (variants.length === 0) {
           Alert.alert('Hata', 'Takımlar oluşturulamadı, oyuncu listesini kontrol et');
           return;
         }
-        const { teamA: a, teamB: b } = result;
-        await commitTeams(a, b, subs, formation, formation);
+        setTeamVariants(variants);
+        setVariantSeen(variants.map(v => v.sig));
+        setVariantIndex(0);
+        setVariantCtx({ subs, pool: main, formation, pairW, lambda });
+        // İlk varyasyon doğrudan uygulanır; kaptan isterse V2/V3'e geçer.
+        await commitTeams(
+          applyFormation(variants[0].rawA, formation),
+          applyFormation(variants[0].rawB, formation),
+          subs, formation, formation,
+        );
         setSelectedForSwap(null);
         setScreen('kadro');
       } catch (error: any) {
-        console.log('handleBuildBalanced hatası:', error);
+        console.log('handleBuildTeams hatası:', error);
         Alert.alert('Hata', error.message || 'Kadro kurulurken bir hata oluştu');
       }
     };
@@ -2611,64 +2974,6 @@ export default function Index() {
     await executeBuild(
       yesSorted.slice(0, fieldCapacity),
       sortByFieldPosition([...yesSorted.slice(fieldCapacity), ...subPool])
-    );
-  }
-
-  async function handleBuildRandom() {
-    if (!amIManager) return;
-    if (myTeamMembers.length === 0) {
-      Alert.alert('Uyarı', 'Takım üyeleri henüz yüklenmedi. Lütfen tekrar dene.');
-      return;
-    }
-
-    const memberPool = myTeamMembers.map(memberToPlayerInfo);
-    const guestPool  = guestPlayers.map(guestToPlayerInfo);
-
-    const yesMembers = memberPool.filter(p => pollVotesMap[p.id] === 'yes');
-    const subMembers = memberPool.filter(p => pollVotesMap[p.id] === 'sub');
-    const yesGuests   = guestPool.filter(g => guestVotesLocal[g.id] === 'yes');
-    const subGuests   = guestPool.filter(g => guestVotesLocal[g.id] === 'sub');
-    const yesPool = [...yesMembers, ...yesGuests];
-    const subPool = [...subMembers, ...subGuests];
-
-    const formation = effectiveFormation(match);
-    const fieldCapacity = teamSizeOf(formation) * 2;
-
-    const executeBuild = async (main: PlayerInfo[], subs: PlayerInfo[]) => {
-      try {
-        const result = buildRandomTeams(main, formation);
-        if (!result || !result.teamA || !result.teamB) {
-          Alert.alert('Hata', 'Takımlar oluşturulamadı, oyuncu listesini kontrol et');
-          return;
-        }
-        const { teamA: a, teamB: b } = result;
-        await commitTeams(a, b, subs, formation, formation);
-        setSelectedForSwap(null);
-        setScreen('kadro');
-      } catch (error: any) {
-        console.log('handleBuildRandom hatası:', error);
-        Alert.alert('Hata', error.message || 'Kadro kurulurken bir hata oluştu');
-      }
-    };
-
-    if (yesPool.length === 0) {
-      Alert.alert(
-        'Oy Yok',
-        'Henüz kimse "Kesin Var" oyu vermedi. Tüm takım üyelerini ve misafirleri kullanayım mı?',
-        [
-          { text: 'İptal', style: 'cancel' },
-          { text: 'Evet, hepsini kullan', onPress: () => {
-              const allPool = [...memberPool, ...guestPool];
-              executeBuild(allPool.slice(0, fieldCapacity), sortByFieldPosition(allPool.slice(fieldCapacity)));
-            } },
-        ]
-      );
-      return;
-    }
-
-    await executeBuild(
-      yesPool.slice(0, fieldCapacity),
-      sortByFieldPosition([...yesPool.slice(fieldCapacity), ...subPool])
     );
   }
 
@@ -3126,7 +3431,7 @@ export default function Index() {
             const color = v === 'yes' ? COLORS.success : v === 'sub' ? COLORS.warning : v === 'no' ? COLORS.danger : COLORS.textMuted;
             const bg    = v === 'yes' ? COLORS.successLight : v === 'sub' ? COLORS.warningLight : v === 'no' ? COLORS.dangerLight : undefined;
             const displayName = member.display_name || 'İsimsiz';
-            const pos = member.position || member.main_position || '—';
+            const pos = positionLabel(member.primary_position || member.position || member.main_position);
             return (
               <View key={uid} style={s.voteCard}>
                 <View style={[s.avatar, bg ? { backgroundColor: bg } : {}]}>
@@ -3159,7 +3464,7 @@ export default function Index() {
                     </View>
                     <View style={{ flex: 1 }}>
                       <Text style={s.playerName}>{guest.name}</Text>
-                      <Text style={s.playerMetaMuted}>{guest.position || '—'} · Misafir</Text>
+                      <Text style={s.playerMetaMuted}>{positionLabel(guest.primary_position || guest.position)} · Misafir</Text>
                     </View>
                     <View style={{ flexDirection: 'row', gap: 4 }}>
                       {[
@@ -3308,14 +3613,33 @@ export default function Index() {
         {/* Alt aksiyon barı — sadece yönetici (kaptan/yardımcı) */}
         {amIManager && (
           <View style={{ paddingHorizontal: 20, paddingTop: 12, paddingBottom: 16, backgroundColor: COLORS.card, borderTopWidth: 1, borderColor: COLORS.border, gap: 10 }}>
-            <View style={{ flexDirection: 'row', gap: 12 }}>
-              <TouchableOpacity style={[s.btnPrimary, { flex: 1 }]} onPress={handleBuildBalanced}>
-                <Text style={s.btnPrimaryText}>Dengeli Kur</Text>
-              </TouchableOpacity>
-              <TouchableOpacity style={[s.btnSecondary, { flex: 1 }]} onPress={handleBuildRandom}>
-                <Text style={s.btnSecondaryText}>Rastgele Kur</Text>
-              </TouchableOpacity>
+            {/* Çeşitlilik: son 3 maçta aynı tarafta oynamış ikilileri ne kadar
+                dağıtsın. Kapalı = saf güç dengesi (eski "Dengeli Kur"),
+                Yüksek = geçmişi güçlü şekilde kıran karışık kadro. */}
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+              <Text style={{ fontSize: 12, fontWeight: '700', color: COLORS.textMuted }}>Çeşitlilik</Text>
+              <View style={{ flexDirection: 'row', flex: 1, gap: 6 }}>
+                {(['off', 'mid', 'high'] as DiversityLevel[]).map(lv => (
+                  <TouchableOpacity
+                    key={lv}
+                    onPress={async () => { setDiversity(lv); await AsyncStorage.setItem('@diversity', lv); }}
+                    style={{
+                      flex: 1, paddingVertical: 7, borderRadius: 8, alignItems: 'center', borderWidth: 1,
+                      borderColor: diversity === lv ? COLORS.primary : COLORS.border,
+                      backgroundColor: diversity === lv ? COLORS.primaryLight : COLORS.bg,
+                    }}
+                  >
+                    <Text style={{ fontSize: 12, fontWeight: '700', color: diversity === lv ? COLORS.primary : COLORS.textMuted }}>
+                      {DIVERSITY_LABELS[lv]}
+                    </Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
             </View>
+            <TouchableOpacity style={s.btnPrimary} onPress={handleBuildTeams}>
+              <Text style={s.btnPrimaryText}>⚡ Kadroları Kur</Text>
+            </TouchableOpacity>
+
             {teamsRevealed && (savedTeamA.length > 0 || savedTeamB.length > 0) ? (
               <TouchableOpacity
                 style={[s.btnPrimary, { backgroundColor: hasChanges ? COLORS.warning : COLORS.border }]}
@@ -4027,29 +4351,27 @@ export default function Index() {
               value={nickname} onChangeText={setNickname}
             />
 
-            <View style={{ flexDirection: 'row', gap: 16, marginBottom: 24 }}>
-              <View style={{ flex: 1 }}>
-                <Text style={{ fontSize: 15, fontWeight: '700', marginBottom: 12, color: COLORS.textMain }}>Ana Mevkin</Text>
-                <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>
-                  {['KL', 'DEF', 'ORT', 'FOR'].map(pos => (
-                    <TouchableOpacity key={pos} onPress={() => setPosition(pos)}
-                      style={{ width: '45%', paddingVertical: 10, borderRadius: 8, borderWidth: 1, borderColor: position === pos ? COLORS.primary : COLORS.border, alignItems: 'center', backgroundColor: position === pos ? COLORS.primaryLight : COLORS.bg }}>
-                      <Text style={{ fontWeight: '700', fontSize: 12, color: position === pos ? COLORS.primary : COLORS.textMuted }}>{pos}</Text>
-                    </TouchableOpacity>
-                  ))}
-                </View>
-              </View>
-              <View style={{ flex: 1 }}>
-                <Text style={{ fontSize: 15, fontWeight: '700', marginBottom: 12, color: COLORS.textMain }}>Ayak</Text>
-                <View style={{ flexDirection: 'column', gap: 8 }}>
-                  {['Sağ', 'Sol', 'İkisi de'].map(f => (
-                    <TouchableOpacity key={f} onPress={() => setFoot(f)}
-                      style={{ paddingVertical: 10, borderRadius: 8, borderWidth: 1, borderColor: foot === f ? COLORS.success : COLORS.border, alignItems: 'center', backgroundColor: foot === f ? COLORS.successLight : COLORS.bg }}>
-                      <Text style={{ fontWeight: '700', fontSize: 12, color: foot === f ? COLORS.fieldDark : COLORS.textMuted }}>{f}</Text>
-                    </TouchableOpacity>
-                  ))}
-                </View>
-              </View>
+            {/* Mevki listesi tek kaynaktan: SKILL_POSITIONS (6 mevki — Ön Libero
+                ve Forvet Arkası dahil). Saklanan değer KOD'dur (ON_LIBERO…),
+                gösterimde positionLabel ile etikete çevrilir. */}
+            <Text style={{ fontSize: 15, fontWeight: '700', marginBottom: 12, color: COLORS.textMain }}>Ana Mevkin</Text>
+            <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginBottom: 24 }}>
+              {SKILL_POSITIONS.map(p => (
+                <TouchableOpacity key={p.code} onPress={() => setPosition(p.code)}
+                  style={[s.attrChip, position === p.code && s.attrChipActive]}>
+                  <Text style={[s.posBtnText, position === p.code && s.posBtnTextActive]}>{p.label}</Text>
+                </TouchableOpacity>
+              ))}
+            </View>
+
+            <Text style={{ fontSize: 15, fontWeight: '700', marginBottom: 12, color: COLORS.textMain }}>Ayak</Text>
+            <View style={{ flexDirection: 'row', gap: 8, marginBottom: 24 }}>
+              {['Sağ', 'Sol', 'İkisi de'].map(f => (
+                <TouchableOpacity key={f} onPress={() => setFoot(f)}
+                  style={{ flex: 1, paddingVertical: 10, borderRadius: 8, borderWidth: 1, borderColor: foot === f ? COLORS.success : COLORS.border, alignItems: 'center', backgroundColor: foot === f ? COLORS.successLight : COLORS.bg }}>
+                  <Text style={{ fontWeight: '700', fontSize: 12, color: foot === f ? COLORS.fieldDark : COLORS.textMuted }}>{f}</Text>
+                </TouchableOpacity>
+              ))}
             </View>
 
             <TouchableOpacity
@@ -4106,11 +4428,11 @@ export default function Index() {
               value={nickname} onChangeText={setNickname}
             />
             <Text style={{ fontSize: 16, fontWeight: '700', marginBottom: 12, color: COLORS.textMain }}>Ana Mevkin</Text>
-            <View style={{ flexDirection: 'row', gap: 8, marginBottom: 32 }}>
-              {['KL', 'DEF', 'ORT', 'FOR'].map(pos => (
-                <TouchableOpacity key={pos} onPress={() => setPosition(pos)}
-                  style={{ flex: 1, padding: 12, borderRadius: 8, borderWidth: 1, borderColor: position === pos ? COLORS.primary : COLORS.border, alignItems: 'center', backgroundColor: position === pos ? COLORS.primaryLight : COLORS.bg }}>
-                  <Text style={{ fontWeight: '600', color: position === pos ? COLORS.primary : COLORS.textMuted }}>{pos}</Text>
+            <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginBottom: 32 }}>
+              {SKILL_POSITIONS.map(p => (
+                <TouchableOpacity key={p.code} onPress={() => setPosition(p.code)}
+                  style={[s.attrChip, position === p.code && s.attrChipActive]}>
+                  <Text style={[s.posBtnText, position === p.code && s.posBtnTextActive]}>{p.label}</Text>
                 </TouchableOpacity>
               ))}
             </View>
@@ -4212,6 +4534,43 @@ export default function Index() {
             <Text style={{ fontSize: 12, fontWeight: '700', color: COLORS.primary }}>{formationB} ⚙️</Text>
           </TouchableOpacity>
         </View>
+
+        {/* Varyasyon seçici — SAHANIN ÜSTÜNDE sabit durur. Amaç kadro kurma
+            ekranına geri dönmeden, sahaya bakarken anında başka bir varyasyona
+            geçebilmek. Dokunmak yeniden HESAPLAMAZ; varyasyonlar zaten üretilmiş,
+            sadece hangisinin uygulandığı değişir. */}
+        {amIManager && teamVariants.length > 1 && (
+          <View style={{
+            flexDirection: 'row', alignItems: 'center', gap: 6,
+            backgroundColor: COLORS.card, paddingHorizontal: 20, paddingBottom: 10,
+            borderBottomWidth: 1, borderColor: COLORS.border,
+          }}>
+            {teamVariants.map((v, i) => (
+              <TouchableOpacity
+                key={v.sig}
+                onPress={() => applyVariant(i)}
+                style={{
+                  flex: 1, paddingVertical: 8, borderRadius: 8, alignItems: 'center', borderWidth: 1.5,
+                  borderColor: variantIndex === i ? COLORS.primary : COLORS.border,
+                  backgroundColor: variantIndex === i ? COLORS.primaryLight : COLORS.bg,
+                }}
+              >
+                <Text style={{ fontSize: 13, fontWeight: '800', color: variantIndex === i ? COLORS.primary : COLORS.textMuted }}>
+                  V{i + 1}
+                </Text>
+              </TouchableOpacity>
+            ))}
+            <TouchableOpacity
+              onPress={handleMoreVariants}
+              style={{
+                paddingVertical: 8, paddingHorizontal: 14, borderRadius: 8, alignItems: 'center',
+                borderWidth: 1.5, borderColor: COLORS.border, backgroundColor: COLORS.bg,
+              }}
+            >
+              <Text style={{ fontSize: 13, fontWeight: '800', color: COLORS.textMuted }}>🔄 Yeni</Text>
+            </TouchableOpacity>
+          </View>
+        )}
 
         <ScrollView
           style={s.body}
@@ -4537,35 +4896,11 @@ export default function Index() {
                   ))}
                 </View>
 
-                <Text style={s.inputLabel}>Formasyon</Text>
-                <Text style={{ fontSize: 12, color: COLORS.textMuted, marginBottom: 8, marginLeft: 4 }}>
-                  Defans - Orta Saha - Forvet · kaleci ayrı, bu sayılara dahil değil
-                </Text>
-                <View style={{ flexDirection: 'row', gap: 10, marginBottom: 20 }}>
-                  {formationsForTeamSize(editMatch.teamSize).map(f => {
-                    const selected = effectiveFormation(editMatch) === f;
-                    const { def, ort, forv } = parseFormation(f);
-                    return (
-                      <TouchableOpacity
-                        key={f}
-                        style={{
-                          flex: 1, paddingVertical: 10, borderRadius: 12, borderWidth: 1,
-                          borderColor: selected ? COLORS.primary : COLORS.border,
-                          backgroundColor: selected ? COLORS.primaryLight : COLORS.bg,
-                          alignItems: 'center',
-                        }}
-                        onPress={() => setEditMatch({ ...editMatch, formation: f })}
-                      >
-                        <Text style={{ fontSize: 16, fontWeight: '800', color: selected ? COLORS.primary : COLORS.textMuted }}>
-                          {f}
-                        </Text>
-                        <Text style={{ fontSize: 10, color: selected ? COLORS.primary : COLORS.textMuted, marginTop: 2 }}>
-                          {def}D · {ort}O · {forv}F
-                        </Text>
-                      </TouchableOpacity>
-                    );
-                  })}
-                </View>
+                {/* Formasyon seçimi burada YOK. Maç kurulurken hangi oyuncuların
+                    geleceği belli olmadığı için burada seçilen formasyon tutmuyordu
+                    (ör. 3-2-1 seçilip 2 defans gelince forvet defansa atanıyordu).
+                    Artık kadro kurulurken gerçek havuza göre otomatik seçiliyor
+                    (suggestFormation); kaptan isterse saha görünümünden değiştirir. */}
 
                 <Text style={s.inputLabel}>Toplam Saha Ücreti (₺)</Text>
                 <View style={{ flexDirection: 'row', gap: 10, marginBottom: 16 }}>
@@ -4832,7 +5167,7 @@ export default function Index() {
                             <View style={{ flexDirection: 'row', gap: 6, marginTop: 4 }}>
                               <View style={{ backgroundColor: COLORS.primaryLight, paddingHorizontal: 7, paddingVertical: 2, borderRadius: 6 }}>
                                 <Text style={{ fontSize: 11, fontWeight: '700', color: COLORS.primary }}>
-                                  {member.position || member.main_position || '—'}
+                                  {positionLabel(member.primary_position || member.position || member.main_position)}
                                 </Text>
                               </View>
                               {roleBadge && (
@@ -4888,7 +5223,7 @@ export default function Index() {
                         <Text style={s.playerName}>{guest.name}</Text>
                         <View style={{ flexDirection: 'row', gap: 6, marginTop: 4 }}>
                           <View style={{ backgroundColor: COLORS.warningLight, paddingHorizontal: 7, paddingVertical: 2, borderRadius: 6 }}>
-                            <Text style={{ fontSize: 11, fontWeight: '700', color: '#92400E' }}>{guest.position || '—'}</Text>
+                            <Text style={{ fontSize: 11, fontWeight: '700', color: '#92400E' }}>{positionLabel(guest.primary_position || guest.position)}</Text>
                           </View>
                           <View style={{ backgroundColor: '#FEF3C7', paddingHorizontal: 7, paddingVertical: 2, borderRadius: 6 }}>
                             <Text style={{ fontSize: 11, fontWeight: '600', color: '#92400E' }}>Misafir</Text>
@@ -5055,7 +5390,11 @@ export default function Index() {
 
         {/* ── Detaylı Nitelik Formu (Pozisyon Bazlı) ── */}
         <Modal visible={showAttrModal} transparent animationType="slide" onRequestClose={() => setShowAttrModal(false)}>
-          <View style={[s.modalOverlay, { justifyContent: 'flex-end' }]}>
+          <KeyboardAvoidingView
+            style={{ flex: 1 }}
+            behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+          >
+            <View style={[s.modalOverlay, { justifyContent: 'flex-end' }]}>
               <View style={{ width: '100%', backgroundColor: COLORS.card, borderTopLeftRadius: 24, borderTopRightRadius: 24, maxHeight: '92%' }}>
                 <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 20, paddingTop: 16, paddingBottom: 12, borderBottomWidth: 1, borderColor: COLORS.border }}>
                   <Text style={{ fontSize: 17, fontWeight: '800', color: COLORS.textMain }} numberOfLines={1}>
@@ -5066,17 +5405,20 @@ export default function Index() {
                   </TouchableOpacity>
                 </View>
 
-                {/* Otomatik kaydırma KAPALI: modal + maxHeight içinde KAS'ın kendi
-                    ölçümü şaşıp listeyi en üste zıplatıyordu. Bunun yerine odaklanan
-                    alanı onLayout ile bilinen mutlak y'ye göre elle ORTALIYORUZ
-                    (measureLayout yok → crash yok). */}
-                <KeyboardAwareScrollView
+                {/* KeyboardAwareScrollView KULLANMIYORUZ. İki ayrı bug'ı vardı:
+                    (1) klavye kapanınca listeyi başa sarıyordu ("boşluğa
+                    tıklayınca en üste atıyor"), (2) sabit maxHeight yüzünden
+                    liste sonuna gelince Kondisyon klavyenin altında kalıyordu.
+                    Çözüm: sheet'i KeyboardAvoidingView klavyenin ÜSTÜNE
+                    kaldırıyor + liste flexShrink ile kalan alana oturuyor →
+                    her alan (Kondisyon dahil) görünür kalıyor. Odaklanan alan
+                    ayrıca onLayout y'sine göre elle ortalanır (measureLayout
+                    yok → crash yok). */}
+                <ScrollView
                   ref={attrScrollRef}
-                  style={{ maxHeight: 440 }}
-                  contentContainerStyle={{ padding: 20, paddingBottom: 12 }}
+                  style={{ flexShrink: 1 }}
+                  contentContainerStyle={{ padding: 20, paddingBottom: 24 }}
                   keyboardShouldPersistTaps="handled"
-                  enableOnAndroid
-                  enableAutomaticScroll={false}
                 >
                   <Text style={s.inputLabel}>Ana Mevki</Text>
                   <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginBottom: 18 }}>
@@ -5159,7 +5501,7 @@ export default function Index() {
                               // (klavye altta kalmayacak şekilde). Mutlak y = liste ofseti
                               // + alanın liste içindeki y'si.
                               const absY = attrFieldsBaseY.current + (attrFieldY.current[field] || 0);
-                              attrScrollRef.current?.scrollToPosition(0, Math.max(0, absY - 120), true);
+                              attrScrollRef.current?.scrollTo({ y: Math.max(0, absY - 120), animated: true });
                             }}
                           />
                         </View>
@@ -5170,7 +5512,7 @@ export default function Index() {
                       Nitelikleri görmek için önce ana mevki seç.
                     </Text>
                   )}
-                </KeyboardAwareScrollView>
+                </ScrollView>
 
                 <View style={{ padding: 20, paddingTop: 12, borderTopWidth: 1, borderColor: COLORS.border }}>
                   <TouchableOpacity
@@ -5182,7 +5524,8 @@ export default function Index() {
                   </TouchableOpacity>
                 </View>
               </View>
-          </View>
+            </View>
+          </KeyboardAvoidingView>
         </Modal>
 
         {/* ── Oyuncu Ekleme Yöntemi Seç ── */}
@@ -5237,18 +5580,11 @@ export default function Index() {
                     value={newGuestName}
                     onChangeText={setNewGuestName}
                   />
-                  <Text style={s.inputLabel}>Mevki</Text>
-                  <View style={s.posSelector}>
-                    {(['KL','DEF','ORT','FOR'] as const).map(pos => (
-                      <TouchableOpacity
-                        key={pos}
-                        style={[s.posBtn, newGuestPos === pos && s.posBtnActive]}
-                        onPress={() => setNewGuestPos(pos)}
-                      >
-                        <Text style={[s.posBtnText, newGuestPos === pos && s.posBtnTextActive]}>{pos}</Text>
-                      </TouchableOpacity>
-                    ))}
-                  </View>
+                  {/* Mevki burada SORULMUYOR — nitelik formunda (Mevki & Nitelikleri
+                      Düzenle) ana/ikincil mevki zaten seçiliyor. */}
+                  <Text style={{ fontSize: 12, color: COLORS.textMuted }}>
+                    Mevki ve nitelikleri ekledikten sonra oyuncu kartından girebilirsin.
+                  </Text>
                   <TouchableOpacity style={s.btnPrimary} onPress={handleAddGuest}>
                     <Text style={s.btnPrimaryText}>Ekle</Text>
                   </TouchableOpacity>
