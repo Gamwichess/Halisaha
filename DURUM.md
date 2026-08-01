@@ -7,7 +7,7 @@
 - **Proje**: Halı saha (amatör futbol) takım yönetim uygulaması
 - **Stack**: Expo (React Native) + Supabase
 - **Mimari**: Tek dosyada SPA-tarzı state navigasyonu — `app/(tabs)/index.tsx` (~5600 satır)
-- **Dağıtım**: iOS TestFlight'ta yayında. Son derlenen: **1.0.3 / build #8** (App Store Connect'e submit edildi). `eas.json`'da `ascAppId: 169829` ekli → `eas build -p ios --profile production --auto-submit --non-interactive` tek komutla build+submit yapıyor. **Bu oturumdaki değişiklikler henüz build'e girmedi** — yeni TestFlight build gerekiyor.
+- **Dağıtım**: iOS TestFlight'ta yayında. TestFlight'taki son build **1.0.3 / build #8**; repo'da sürüm **1.0.4**'e yükseltildi ama **henüz build alınmadı**. `eas.json`'da `ascAppId: 169829` ekli → `eas build -p ios --profile production --auto-submit --non-interactive` tek komutla build+submit yapıyor. `/guncelle` artık her çalıştırıldığında sürümü otomatik patch +1 yapıp commit/push ediyor (sormuyor).
 - **KRİTİK / yayın öncesi**: RLS (Row Level Security) hâlâ KAPALI — public yayından önceki en büyük iş. Tablolar: profiles, teams, team_members, polls, poll_votes, guest_players, notifications, team_invites, match_lineups, player_ratings.
 
 ## Oturmuş Sistemler (çalışıyor)
@@ -24,9 +24,10 @@
 - Çok takımlı kullanım: takım scope'u düzgün izole; **ana takım seçimi** kalıcı (`@mainTeamId`)
 - **Takım çeşitliliği + varyasyon sistemi ÇALIŞIYOR** (bu oturum — aşağıda mimari not)
 - **Otomatik formasyon önerisi ÇALIŞIYOR** (bu oturum — aşağıda mimari not)
+- **Takım kimliği ÇALIŞIYOR** (logo + isim + marka rengi; migration uygulandı, kullanıcı test etti — aşağıda mimari not)
 
 ## Son Oturumda Yapılanlar (2026-07-31 / 08-01)
-Tamamı `app/(tabs)/index.tsx` içinde; migration YOK, DB şeması değişmedi.
+1-7 tamamı `app/(tabs)/index.tsx` içinde, DB şeması değişmedi. 8-9 takım kimliği işi (migration VAR, uygulandı).
 
 1. **Nitelik formu scroll düzeltmesi** — `KeyboardAwareScrollView` kaldırıldı (paket artık hiçbir yerde kullanılmıyor, `package.json`'da duruyor). İki bug birden çözüldü: (a) boşluğa tıklayınca listenin en üste zıplaması → KAS'ın klavye kapanınca `resetScrollToCoords` ile başa sarmasıydı; (b) Kondisyon'un klavye altında kalması → sabit `maxHeight: 440` yüzündendi. Yerine: sheet `KeyboardAvoidingView` ile klavyenin üstüne kalkıyor + liste `flexShrink: 1`.
 2. **Mevki listeleri düzeltildi** — profil ve profil-tamamlama ekranları artık `SKILL_POSITIONS` (6 mevki, Ön Libero + Forvet Arkası dahil) kullanıyor. `main_position` artık KOD saklıyor (`ON_LIBERO`); gösterim için `positionLabel()` helper'ı eklendi (eski `KL/DEF/ORT/FOR` kayıtları olduğu gibi görünür). Oyuncu listelerinde `primary_position` önceliklendiriliyor.
@@ -35,6 +36,8 @@ Tamamı `app/(tabs)/index.tsx` içinde; migration YOK, DB şeması değişmedi.
 5. **Varyasyon seçimi (V1/V2/V3 + 🔄 Yeni)** — saha görünümünde.
 6. **Otomatik formasyon önerisi** — maç oluşturma/düzenlemedeki formasyon seçici KALDIRILDI.
 7. **Buton birleştirme** — "Dengeli Kur" + "Rastgele Kur" → tek **⚡ Kadroları Kur**. `buildRandomTeams` ve `handleBuildRandom` silindi.
+8. **Takım kimliği** (logo + isim + marka rengi) — migration `20260801120000_team_identity.sql` yazıldı ve **uygulandı** (`npx supabase db push`). Kullanıcı test etti, çalışıyor. Aşağıda mimari not.
+9. **Sürüm 1.0.4 + `/guncelle` düzeltmesi** — komut artık sürümü sormadan patch +1 yapıp commit/push ediyor (`.claude/commands/guncelle.md`).
 
 ## Geçmiş Oturumlar (özet)
 - **2026-07-30/31**: TestFlight rebuild 1.0.2→1.0.3, build #8 alındı ve `--auto-submit --non-interactive` ile ASC'ye submit edildi (`ascAppId: 169829` sayesinde sorunsuz).
@@ -72,6 +75,16 @@ Tamamı `app/(tabs)/index.tsx` içinde; migration YOK, DB şeması değişmedi.
 
 **Doğrulanmış senaryolar:** 30 Temmuz gerçek havuzu → 2-3-1 (kullanıcının elle yaptığı). 4 DEF + 4 ORT + 4 FOR (ikincili Forvet Arkası) → 2-3-1 (2-2-2'ye kaçmıyor). 8 FOR + 4 DEF, hiç orta saha/ikincil yok → 2-2-2 (gerçekten başka seçenek yokken doğru).
 
+## Takım Kimliği Mimarisi (kalıcı notlar — YENİ)
+- **Şema**: `teams.logo_url` (text) + `teams.color` (text, hex). Migration `20260801120000_team_identity.sql` — kolonlar + `team_logos` public bucket + `storage.objects` policy'leri. **Uygulandı.**
+- ⚠️ `storage.objects`'te RLS uygulama tablolarından farklı olarak **varsayılan AÇIK**, o yüzden policy şart oldu. Şu anki policy'ler "giriş yapmış herkes yazabilir" seviyesinde — RLS turunda "sadece o takımın kaptanı/yardımcısı `teamId/` klasörüne yazar" diye daraltılacak.
+- **Renk = MARKA rengi, saha tarafı rengi DEĞİL.** Takım her maç kendi içinde A/B'ye bölünüyor ve A/B'nin kendi sabit renkleri var (mavi `#3B82F6` / yeşil `#10B981`); `teams.color` onları ezmez. Modalda kullanıcıya da yazıyor.
+- **Yükleme**: `expo-image-picker` → `base64: true` → `base64-arraybuffer` `decode()` → `supabase.storage.from('team_logos').upload()`. Yol `${teamId}/logo_${Date.now()}.jpg`. **`expo-file-system` KULLANILMIYOR** — SDK 54'te API'si değişti (`File`/`Directory`), gereksiz risk. Yeni logo yüklenince eski dosya `removeTeamLogoFile()` ile siliniyor.
+- **`TeamLogo` bileşeni** tek kaynak; logo yoksa takım renginde baş harf placeholder'ı. 4 yerde: Takımım kimlik şeridi (72px), ana ekran başlığı (38px), iki takım seçim listesi (32px), paylaşım görseli üst şeridi (44px).
+- **Yetki**: `amIManager` (kaptan + yardımcı) düzenleyebilir.
+- **Sabitler**: `TEAM_LOGO_BUCKET`, `DEFAULT_TEAM_COLOR = '#22C55E'`, `TEAM_COLORS` (10'luk palet — tam renk seçici yerine, ek bağımlılık olmasın diye).
+- **DİKKAT — öğrenilen ders**: `fetchUserTeams`'in select'ine yeni kolonları eklerken migration uygulanmamış DB'de sorgu **komple** hata verdi ve Takımım menüsü boşaldı (hata da yutuluyordu). Artık hata loglanıyor ve kimliksiz select'e geri düşülüyor. **Yeni kolon eklerken hep bu geri düşüşü düşün** — `fetchMyTeam` `select('*')` kullandığı için etkilenmemişti, tutarsız davranış teşhisi zorlaştırdı.
+
 ## Mevki / Nitelik Mimarisi (kalıcı notlar)
 - 6 mevki: Kaleci, Defans, Ön Libero, Orta Saha, Forvet Arkası, Forvet (`SKILL_POSITIONS`).
 - **Nitelik seti SABİT**: saha oyuncuları `OUTFIELD_ATTRIBUTES = ['Şut','Pas','Top Kontrolü','Markaj','Hız','Fiziksel Güç']`; kaleci `GOALKEEPER_ATTRIBUTES = ['Uzanış','Tutuş','Dağıtım','Refleks','Hız','Pozisyon']`. İkincil mevki nitelik SETİ eklemez, yalnızca OVR ağırlığına harmanlanır.
@@ -91,9 +104,15 @@ Tamamı `app/(tabs)/index.tsx` içinde; migration YOK, DB şeması değişmedi.
 - `switchTeam` / `handleCreateTeam` / `handleAcceptInvite` seçilen takımı `@mainTeamId`'ye yazar. Ayrılınan takım ana takımsa anahtar silinir, `fetchMyTeam` tekrar çağrılır.
 
 ## Devam Eden / Yarım Kalan İş
-- **⏳ İLK İŞ — bu oturumun değişikliklerini gerçek cihazda test et.** Özellikle: (a) nitelik formunda Kondisyon klavye altında kalmıyor mu + boşluğa tıklayınca zıplama gitti mi, (b) V1/V2/V3 geçişi sahada anlık çalışıyor mu ve formasyonu bozmuyor mu, (c) otomatik formasyon önerisi gerçek yoklamada makul mü.
-- **⏳ Yeni TestFlight build**: bu oturumdaki hiçbir değişiklik build'e girmedi. Test bitince `/guncelle`.
+- **⏳ İLK İŞ — kadro kurma değişikliklerini gerçek cihazda test et.** Takım kimliği (logo/isim/renk) test edildi ve çalışıyor; test EDİLMEYENLER: (a) nitelik formunda Kondisyon klavye altında kalmıyor mu + boşluğa tıklayınca zıplama gitti mi, (b) V1/V2/V3 geçişi sahada anlık çalışıyor mu ve formasyonu bozmuyor mu, (c) otomatik formasyon önerisi gerçek yoklamada makul mü, (d) paylaşım görselinde logo çıkıyor mu (uzak görsel `captureRef` anında yüklenmemiş olabilir — tek şüpheli nokta).
+- **⏳ Yeni TestFlight build**: TestFlight'ta hâlâ 1.0.3/#8 var; bu oturumun hiçbir değişikliği kullanıcıların elinde değil. Test bitince `/guncelle` (sürümü kendisi 1.0.5 yapacak).
 - **⏳ Otomatik maç-sonu oylama doğrulaması**: ileri saatli gerçek maçla test edilecek (önceki oturumdan devam).
+
+## Checkpoint / Geri Dönüş Noktaları
+- Kalıcı geri dönüş için **git tag** kullanılıyor (`checkpoint-YYYY-MM-DD-NN` biçimi), `/checkpoint` komutuyla alınır — bkz. `.claude/commands/checkpoint.md`.
+- Claude Code'un yerleşik rewind özelliği (Esc Esc) OTURUM İÇİdir ve kalıcı değildir; "haftalar sonra buraya dön" ihtiyacını karşılamaz. Bu yüzden tag yöntemi kuruldu.
+- Geri dönmek için: `git checkout <tag>` (bakmak için) veya `git reset --hard <tag>` (geri almak için — dikkat, sonrası silinir).
+- ⚠️ Tag yalnızca KODU geri alır, **Supabase şemasını/verisini geri almaz**. Migration uygulandıktan sonra koda geri dönmek şema uyuşmazlığı yaratabilir.
 
 ## Çalışma Tarzı / Tercihler
 - Kullanıcı Türkçe konuşur.

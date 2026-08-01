@@ -3,13 +3,14 @@
 > `/baslat` ile okunur, `/bitir` ile güncellenir. "Sonraya / Erken" bölümü = unutturma notları.
 
 ## Aktif (şu an üstünde çalışılan)
-- [ ] **⏳ Bu oturumun değişikliklerini gerçek cihazda test et** — hiçbiri henüz build'e girmedi:
+- [ ] **⏳ Kalan değişiklikleri gerçek cihazda test et** — takım kimliği test edildi ✅, bunlar edilmedi:
   - Nitelik formu: Kondisyon klavyenin altında kalıyor mu, boşluğa tıklayınca zıplıyor mu
   - Profil + profil tamamlama: 6 mevki geliyor mu (Ön Libero / Forvet Arkası)
   - Misafir ekleme: mevki sormuyor, sonra nitelik formundan giriliyor
   - **V1/V2/V3 + 🔄 Yeni**: sahada anlık değişiyor mu, formasyonu bozuyor mu
   - **Otomatik formasyon**: gerçek yoklamada makul öneri veriyor mu
-- [ ] **⏳ Test bitince yeni TestFlight build** — `/guncelle` (son yayınlanan 1.0.3 / build #8, bu oturumun hiçbir değişikliği içinde yok).
+  - **Paylaşım görselinde logo**: `captureRef` uzak görsel yüklenmeden yakalarsa logo boş çıkabilir — tek şüpheli nokta
+- [ ] **⏳ Test bitince yeni TestFlight build** — `/guncelle` (TestFlight'ta hâlâ 1.0.3 / build #8; repo 1.0.4, komut kendisi 1.0.5 yapacak).
 
 ## Bilinen Buglar (takip et — durumları belirsiz, test edilecek)
 - [ ] **⏳ Otomatik maç-sonu oylama doğrulaması**: Otomatik bitiş düzeltmesi kodlandı ama geçmişe-dönük kurulan maçta tetiklenmiyor gibi. **İleri saatte gerçek bir maç** kurup, saati geçince oylamanın otomatik geldiğini doğrula. Test aşamasındaki arkadaşlardan feedback al. (Kod: `fetchActivePoll` zaman aşımı dalı + `onRefresh` home.)
@@ -18,11 +19,11 @@
 
 ## Sıradaki İşler (acelesi yok ama sırada)
 - [ ] **Oyuncu detay menüsü UI**: Oyuncuya tıklayınca açılan menü referans görseldeki gibi görünmeli — mevcut UI kötü. (⚠️ Referans görsel işe başlarken kullanıcıdan alınacak — görsel olmadan başlanamaz.)
-- [ ] **Takım logosu + "Takımım" özelleştirme**: Takım logosu oluşturma/yükleme, "Takımım" ekranını özelleştirme (isim, renk, logo). (Supabase storage bucket + teams tablosuna logo_url gerekebilir.)
 - [ ] **Maç hatırlatıcı bildirimi**: Maç saati yaklaşınca push/local bildirim. Kaç saat önce ve açık/kapalı kullanıcı ayarı olmalı. (expo-notifications local schedule; ayar `@pollSettings` benzeri saklanır.)
 
 ## Sonraya / Erken (UNUTTURMA — şimdi yapma, ama hatırlat)
 - [ ] **RLS'i aç** — public TestFlight/yayın ÖNCESİ zorunlu. Şu an kapalı. En kritik yayın-öncesi iş. (Erken: önce özellikler otursun. NOT: bu oturumda gerçek veriyi anon key ile okuyabildik — kapalı olduğunun canlı kanıtı.)
+  - **Bu turda `team_logos` storage policy'lerini de daralt**: şu an "giriş yapmış herkes yazabilir". Olması gereken: sadece o takımın kaptanı/yardımcısı `teamId/` klasörüne yazabilsin. (`supabase/migrations/20260801120000_team_identity.sql` içine not düşüldü.)
 - [ ] **Mevcut oyuncuların OVR'ını toplu yeniden-hesapla** — nitelik sistemi değişti; eski satırların stored `overall_rating`'i ancak yeniden kaydedilince güncelleniyor. (Açık soru — gerçek veri az olduğu için acil değil.)
 - [ ] **Eski profillerin `main_position`'ı** — artık SkillPosition KODU saklanıyor (`ON_LIBERO`). Eskiden `DEF`/`FOR` kaydedilmiş profillerde profil ekranında hiçbir chip seçili görünmez, kullanıcı bir kez yeniden seçmeli. İşlevsel etkisi yok (takım kurma `team_members.primary_position` kullanıyor). İstenirse tek seferlik eşleme scripti yazılabilir.
 - [ ] **Çeşitlilik/varyasyon sabitlerinin ince ayarı** — gerçek kullanım oturunca gözden geçir: `DIVERSITY_LAMBDA` (off 0 / mid 8 / high 20), `VARIANT_SPREAD = 15`, `VARIANT_COUNT = 3`, `VARIANT_RESTARTS = 150`, `PAIR_HISTORY_MATCHES = 3`, `PAIR_DECAY = 0.65`. Varyasyon sayısını 4'e çıkarmak için sadece `VARIANT_COUNT` yeter, UI kendini ona göre çiziyor.
@@ -35,6 +36,10 @@
 - [ ] **Supabase pause**: free tier 7 günde bir duraklıyor. Haftada 1 manuel dashboard girişiyle idare. Launch'a yakın Pro'ya geçiş düşünülebilir.
 
 ## Tamamlananlar (2026-07-31 / 08-01)
+- [x] **Takım kimliği: logo + isim + marka rengi** — TEST EDİLDİ, ÇALIŞIYOR. Migration uygulandı (`teams.logo_url`, `teams.color`, `team_logos` public bucket + policy'ler). Logo yükleme `expo-image-picker` base64 → Storage; `expo-file-system` kullanılmadı (SDK 54'te API değişti). `TeamLogo` bileşeni 4 yerde. Düzenleme kaptan + yardımcıya açık.
+- [x] **Takım listesi boş kalma bug'ı** — DÜZELTİLDİ. `fetchUserTeams` yeni kolonları isteyince migration'sız DB'de sorgu komple hata verip Takımım menüsünü boşaltıyordu; hata artık loglanıyor ve kimliksiz select'e geri düşülüyor.
+- [x] **`/guncelle` her seferinde sürüm bump'lıyor** — artık sormuyor, patch +1 yapıp commit/push ediyor. Sürüm 1.0.4.
+- [x] **`/checkpoint` komutu + git tag tabanlı geri dönüş noktaları** — `.claude/commands/checkpoint.md`.
 - [x] **Takım çeşitliliği sistemi** — aynı çekirdeğin her hafta aynı tarafta oynaması çözüldü. Kök neden: `buildBalancedTeams` tamamen deterministikti. `match_lineups`'tan son 3 maçın birliktelik geçmişi + mevki kovası içi yerel arama. Gerçek veriyle doğrulandı: tekrar puanı 32.1→20, denge farkı 15→0-5.
 - [x] **Varyasyon seçimi V1/V2/V3 + 🔄 Yeni** — kadro (saha) ekranında, geri dönmeden anlık geçiş. Orta'da 29, Yüksek'te 22 farklı varyasyon üretilebiliyor.
 - [x] **"Dengeli Kur" + "Rastgele Kur" → tek ⚡ Kadroları Kur** + Çeşitlilik seçici (Kapalı/Orta/Yüksek, `@diversity`).
