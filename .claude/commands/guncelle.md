@@ -1,6 +1,6 @@
 ---
-description: Uygulamayı TestFlight'a güncelle — kodu kontrol et, EAS iOS build al ve TestFlight'a submit et
-allowed-tools: Bash(git *), Read
+description: Uygulamayı TestFlight'a güncelle — sürümü yükselt, EAS iOS build al ve TestFlight'a submit et
+allowed-tools: Bash(git *), Read, Edit
 ---
 
 # Uygulamayı TestFlight'a Güncelle
@@ -18,30 +18,28 @@ Amaç: mevcut kodu yeni bir iOS build olarak TestFlight'a göndermek.
 - `git log --oneline -3` ve `git status -sb` ile local'in remote ile senkron (push'lu) olduğunu doğrula.
 - Temiz değilse KULLANICIYA sor: "Önce commit/push edelim mi?" — onaysız build'e geçme.
 
-## 2. Sürüm bilgisini hatırlat (elle bump YOK)
-- `app.json` → `expo.version` = pazarlama sürümü (örn. 1.0.1). Bunu **yalnızca kullanıcı isterse** artır.
-- Build numarası `eas.json`'da `appVersionSource: remote` + `production.autoIncrement` ile
-  **otomatik artar** — elle bump YAPMA.
-- Kullanıcıya sor: "Pazarlama sürümü (`version`) aynı kalsın mı, yoksa artıralım mı?"
-  (TestFlight test build'leri için genelde aynı sürüm + artan build numarası yeterli.)
+## 2. Sürümü HER SEFERİNDE yükselt (sorma, yap)
+Kullanıcının kalıcı tercihi: **her `/guncelle`'de pazarlama sürümü artar.** Sorma, doğrudan uygula.
+
+- `app.json` → `expo.version` yama (patch) hanesini bir artır: `1.0.3` → `1.0.4`.
+  Minor/major atlanacaksa kullanıcı bunu kendisi söyler; varsayılan her zaman patch +1.
+- Değişikliği commit + push et: `git commit -m "Sürüm X.Y.Z'ye yükseltildi (TestFlight build)"` → `git push`.
+  Build daima commit'li koddan alınır.
+- Build numarasına DOKUNMA — `eas.json`'da `appVersionSource: remote` + `production.autoIncrement`
+  ile otomatik artıyor.
 
 ## 3. Build + Submit komutunu VER (kullanıcı çalıştırır)
-Kullanıcıya şu komutu `!` ile çalıştırmasını söyle (interaktif — Apple/EAS soruları çıkabilir):
+`eas.json > submit.production.ios.ascAppId` = **169829** ekli olduğu için non-interactive submit çalışır.
+Kullanıcıya şu komutu `!` ile çalıştırmasını söyle:
 
 ```
-! eas build -p ios --profile production --auto-submit
+! eas build -p ios --profile production --auto-submit --non-interactive
 ```
 
 - `--auto-submit` build biter bitmez TestFlight'a gönderir.
-- `eas.json > submit.production` boşsa (`ascAppId` yoksa) interaktif modda EAS gerekli bilgiyi
-  sorar/bundle'dan bulur. Eğer `--auto-submit` takılırsa alternatif: önce sadece build
-  (`! eas build -p ios --profile production`), bitince `! eas submit -p ios --latest`.
-
-## 4. Kalıcı otomatik submit (opsiyonel öneri)
-Her seferinde interaktif submit'ten kurtulmak için `eas.json > submit.production`'a
-`ascAppId` eklenebilir (App Store Connect → uygulama → App Information → "Apple ID" numarası).
-Bir kez eklenince `--auto-submit --non-interactive` sorunsuz çalışır. Kullanıcı Apple ID'yi
-verirse `eas.json`'a ekle; vermezse sadece hatırlat.
+- Takılırsa alternatif: önce sadece build (`! eas build -p ios --profile production`),
+  bitince `! eas submit -p ios --latest`.
+- Log'da Apple 401 uyarısı çıkabilir; EAS kayıtlı ASC API Key ile devam ettiği için sorun değil.
 
 ## 5. Bitince
 - Build/submit başlatıldığında kullanıcıya kısa bilgi ver: EAS build kuyruğa girdi, TestFlight'ta
