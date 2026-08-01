@@ -2183,12 +2183,30 @@ export default function Index() {
   }
 
   async function fetchUserTeams(userId: string) {
-    const { data } = await supabase
+    // logo_url/color kolonları takım kimliği migration'ıyla geldi. Migration
+    // henüz uygulanmamış bir DB'ye karşı bu select KOMPLE hata veriyor ve takım
+    // listesi boş kalıyordu ("Takımım menüsünde takım yok"). Bu yüzden eksik
+    // kolon durumunda kimliksiz select'e geri düşüyoruz — liste her hâlükârda dolsun.
+    let rows: any[] | null = null;
+    const withIdentity = await supabase
       .from('team_members')
       .select('team_id, role, teams(id, name, logo_url, color)')
       .eq('user_id', userId);
-    if (data) {
-      const teams = data.map((m: any) => ({
+
+    if (withIdentity.error) {
+      console.log('fetchUserTeams: kimlik kolonları okunamadı, sade select deneniyor —', withIdentity.error.message);
+      const basic = await supabase
+        .from('team_members')
+        .select('team_id, role, teams(id, name)')
+        .eq('user_id', userId);
+      if (basic.error) { console.log('fetchUserTeams hatası:', basic.error.message); return; }
+      rows = basic.data;
+    } else {
+      rows = withIdentity.data;
+    }
+
+    if (rows) {
+      const teams = rows.map((m: any) => ({
         id: m.teams?.id, name: m.teams?.name, role: m.role,
         logo_url: m.teams?.logo_url ?? null, color: m.teams?.color ?? null,
       }));
