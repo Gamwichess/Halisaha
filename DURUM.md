@@ -7,7 +7,7 @@
 - **Proje**: Halı saha (amatör futbol) takım yönetim uygulaması
 - **Stack**: Expo (React Native) + Supabase
 - **Mimari**: Tek dosyada SPA-tarzı state navigasyonu — `app/(tabs)/index.tsx` (~5600 satır)
-- **Dağıtım**: iOS TestFlight'ta yayında. TestFlight'taki son build **1.0.3 / build #8**; repo'da sürüm **1.0.4**'e yükseltildi ama **henüz build alınmadı**. `eas.json`'da `ascAppId: 169829` ekli → `eas build -p ios --profile production --auto-submit --non-interactive` tek komutla build+submit yapıyor. `/guncelle` artık her çalıştırıldığında sürümü otomatik patch +1 yapıp commit/push ediyor (sormuyor).
+- **Dağıtım**: iOS TestFlight'ta yayında. Son build **1.0.5 / build #9** — EAS'te derlendi, App Store Connect'e **başarıyla submit edildi** (Apple "Processing"). Build ID `b9d581fe`. Bu build, aşağıdaki tüm yeni özellikleri ilk kez test cihazlarına taşıyor. `eas.json`'da `ascAppId: 169829` ekli → `eas build -p ios --profile production --auto-submit --non-interactive` tek komutla build+submit yapıyor. `/guncelle` artık sürümü sormadan patch +1 yapıp commit/push ediyor.
 - **KRİTİK / yayın öncesi**: RLS (Row Level Security) hâlâ KAPALI — public yayından önceki en büyük iş. Tablolar: profiles, teams, team_members, polls, poll_votes, guest_players, notifications, team_invites, match_lineups, player_ratings.
 
 ## Oturmuş Sistemler (çalışıyor)
@@ -38,6 +38,8 @@
 7. **Buton birleştirme** — "Dengeli Kur" + "Rastgele Kur" → tek **⚡ Kadroları Kur**. `buildRandomTeams` ve `handleBuildRandom` silindi.
 8. **Takım kimliği** (logo + isim + marka rengi) — migration `20260801120000_team_identity.sql` yazıldı ve **uygulandı** (`npx supabase db push`). Kullanıcı test etti, çalışıyor. Aşağıda mimari not.
 9. **Sürüm 1.0.4 + `/guncelle` düzeltmesi** — komut artık sürümü sormadan patch +1 yapıp commit/push ediyor (`.claude/commands/guncelle.md`).
+10. **`/checkpoint` komutu + ilk checkpoint** — `checkpoint-2026-08-01-01` tag'i atıldı ve push edildi.
+11. **TestFlight build 1.0.5 / #9** — sürüm 1.0.4→1.0.5, build alındı ve submit edildi. Non-interactive submit sorunsuz, bu sefer Apple 401 uyarısı da çıkmadı.
 
 ## Geçmiş Oturumlar (özet)
 - **2026-07-30/31**: TestFlight rebuild 1.0.2→1.0.3, build #8 alındı ve `--auto-submit --non-interactive` ile ASC'ye submit edildi (`ascAppId: 169829` sayesinde sorunsuz).
@@ -104,9 +106,15 @@
 - `switchTeam` / `handleCreateTeam` / `handleAcceptInvite` seçilen takımı `@mainTeamId`'ye yazar. Ayrılınan takım ana takımsa anahtar silinir, `fetchMyTeam` tekrar çağrılır.
 
 ## Devam Eden / Yarım Kalan İş
-- **⏳ İLK İŞ — kadro kurma değişikliklerini gerçek cihazda test et.** Takım kimliği (logo/isim/renk) test edildi ve çalışıyor; test EDİLMEYENLER: (a) nitelik formunda Kondisyon klavye altında kalmıyor mu + boşluğa tıklayınca zıplama gitti mi, (b) V1/V2/V3 geçişi sahada anlık çalışıyor mu ve formasyonu bozmuyor mu, (c) otomatik formasyon önerisi gerçek yoklamada makul mü, (d) paylaşım görselinde logo çıkıyor mu (uzak görsel `captureRef` anında yüklenmemiş olabilir — tek şüpheli nokta).
-- **⏳ Yeni TestFlight build**: TestFlight'ta hâlâ 1.0.3/#8 var; bu oturumun hiçbir değişikliği kullanıcıların elinde değil. Test bitince `/guncelle` (sürümü kendisi 1.0.5 yapacak).
-- **⏳ Otomatik maç-sonu oylama doğrulaması**: ileri saatli gerçek maçla test edilecek (önceki oturumdan devam).
+- **⏳ İLK İŞ — 1.0.5 / #9 TestFlight'ta test edilecek.** Bu build birçok özelliği İLK KEZ test cihazlarına taşıdı. Kullanıcı + test arkadaşlarından feedback beklenecek. Test EDİLMEYEN listesi:
+  - (a) Nitelik formu scroll'u — Kondisyon klavye altında kalıyor mu, boşluğa tıklayınca zıplıyor mu
+  - (b) V1/V2/V3 varyasyon geçişi — sahada anlık değişiyor mu, formasyonu bozmuyor mu
+  - (c) Otomatik formasyon önerisi — gerçek yoklamada makul mü (maç kurarken artık formasyon SORULMUYOR)
+  - (d) Paylaşım görselinde takım logosu — `captureRef` uzak görsel yüklenmeden yakalarsa boş çıkabilir, **tek şüpheli nokta**
+  - (e) Yedek yerleştirme mevkiye göre mi
+  - (f) Maç kendi kendine bitince oylamanın otomatik açılması (önceki oturumdan devam, ileri saatli gerçek maç gerekiyor)
+  - Takım kimliği (logo/isim/renk) kullanıcı tarafından test edildi ✅ — ama başka bir kaptanın kendi takımında denemesi iyi olur.
+- Feedback gelince: düzeltmeler → `/checkpoint` → `/guncelle`.
 
 ## Checkpoint / Geri Dönüş Noktaları
 - Kalıcı geri dönüş için **git tag** kullanılıyor (`checkpoint-YYYY-MM-DD-NN` biçimi), `/checkpoint` komutuyla alınır — bkz. `.claude/commands/checkpoint.md`.
