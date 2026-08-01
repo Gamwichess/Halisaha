@@ -514,6 +514,63 @@ function sortByFieldPosition(list: PlayerInfo[]): PlayerInfo[] {
   });
 }
 
+// Saha kadrosunu kapasiteye TAMAMLAR.
+// Eskiden "Kesin Var" diyenler kapasiteden azsa kadro eksik kuruluyordu ve
+// yedekler (Yedek oyu verenler + yedek kulübesindekiler) hiç kullanılmıyordu →
+// sahada boş slot kalıyordu. Artık eksik slotlar yedek havuzundan doldurulur.
+//
+// DENGEYİ BOZMAMASI için seçim rastgele/güce göre değil MEVKİ İHTİYACINA göre:
+// hangi kovada açık varsa önce oradan, o kovaya en uygun oyuncu alınır
+// (ana mevki > ikincil mevki > ham uyum — posScore). Güç dengesi zaten sonraki
+// aşamada buildTeamVariants tarafından iki takıma dağıtılırken kuruluyor;
+// buradaki iş havuzu mevki olarak DÜZGÜN doldurmak.
+function fillFieldPool(
+  base: PlayerInfo[],
+  reserves: PlayerInfo[],
+  capacity: number,
+  formation: Formation,
+): { field: PlayerInfo[]; bench: PlayerInfo[]; promoted: PlayerInfo[] } {
+  // Kapasite dolu/aşkın: mevkiye göre dengeli bir kesit sahada kalır, gerisi yedeğe.
+  if (base.length >= capacity) {
+    const sorted = sortByFieldPosition(base);
+    return {
+      field: sorted.slice(0, capacity),
+      bench: sortByFieldPosition([...sorted.slice(capacity), ...reserves]),
+      promoted: [],
+    };
+  }
+
+  // İki takımın TOPLAM slot ihtiyacı, elde olanlar düşülerek açık kovalar.
+  const { def, ort, forv } = parseFormation(formation);
+  const need: Record<Position, number> = { KL: 2, DEF: def * 2, ORT: ort * 2, FOR: forv * 2 };
+  base.forEach(p => { if (need[p.pos] !== undefined) need[p.pos] -= 1; });
+
+  const pool = [...reserves];
+  const promoted: PlayerInfo[] = [];
+  const missing = capacity - base.length;
+  while (promoted.length < missing && pool.length > 0) {
+    const target = (['KL', 'DEF', 'ORT', 'FOR'] as Position[])
+      .reduce((best, pos) => (need[pos] > need[best] ? pos : best), 'DEF' as Position);
+    let idx: number;
+    if (need[target] > 0) {
+      // posScore küçükse daha uygun (fonksiyon negatif skor döndürüyor)
+      idx = pool.reduce((bi, p, i) => (posScore(p, target) < posScore(pool[bi], target) ? i : bi), 0);
+      need[target] -= 1;
+    } else {
+      // Tüm kovalar kapandı ama hâlâ boş slot var → en yüksek OVR
+      idx = pool.reduce((bi, p, i) => (p.rating > pool[bi].rating ? i : bi), 0);
+    }
+    promoted.push(pool[idx]);
+    pool.splice(idx, 1);
+  }
+
+  return {
+    field: sortByFieldPosition([...base, ...promoted]),
+    bench: sortByFieldPosition(pool),
+    promoted,
+  };
+}
+
 function posScore(p: PlayerInfo, targetPos: Position): number {
   const st = p.stats ?? { pas: 70, sut: 70, fizik: 70, hiz: 70 };
   let score = 0;
@@ -3092,7 +3149,7 @@ export default function Index() {
       ? await fetchPairWeights(myTeamInfo.id, activePollIdRef.current)
       : {};
 
-    const executeBuild = async (main: PlayerInfo[], subs: PlayerInfo[]) => {
+    const executeBuild = async (main: PlayerInfo[], subs: PlayerInfo[], promoted: PlayerInfo[] = []) => {
       try {
         // Formasyon sahaya çıkacak GERÇEK havuzdan seçilir; iki takım da aynı
         // havuzdan bölündüğü için ikisine de aynı formasyon uygun düşer.
@@ -3114,6 +3171,14 @@ export default function Index() {
         );
         setSelectedForSwap(null);
         setScreen('kadro');
+        // Yedekten sahaya alınanları sessizce geçirme — kaptan "bu adam Yedek
+        // demişti, sahada ne işi var?" diye şaşırmasın.
+        if (promoted.length > 0) {
+          Alert.alert(
+            'Kadro Yedeklerle Tamamlandı',
+            `"Kesin Var" sayısı ${promoted.length} kişi eksikti. Mevki ihtiyacına göre yedeklerden tamamlandı:\n\n${promoted.map(p => `• ${p.name}`).join('\n')}`,
+          );
+        }
       } catch (error: any) {
         console.log('handleBuildTeams hatası:', error);
         Alert.alert('Hata', error.message || 'Kadro kurulurken bir hata oluştu');
@@ -3135,14 +3200,15 @@ export default function Index() {
       return;
     }
 
-    // 'yes' oy verenler (üye + misafir) → saha kadrosu (formasyon kapasitesi
-    // kadar); fazlası + 'sub' → yedek. Havuzu önce mevkiye göre sırala ki
-    // kapasite taşarsa her mevkiden dengeli bir kesit sahaya kalsın.
-    const yesSorted = sortByFieldPosition(yesPool);
-    await executeBuild(
-      yesSorted.slice(0, fieldCapacity),
-      sortByFieldPosition([...yesSorted.slice(fieldCapacity), ...subPool])
+    // 'yes' oy verenler (üye + misafir) → saha kadrosu. Kapasite taşarsa fazlası
+    // yedeğe düşer; kapasite DOLMAZSA eksik slotlar yedek havuzundan mevki
+    // ihtiyacına göre doldurulur (bkz. fillFieldPool).
+    // Mevki ihtiyacı hesabı için formatın varsayılan formasyonu yeterli — nihai
+    // formasyon zaten aşağıda, DOLMUŞ havuza bakılarak suggestFormation ile seçilir.
+    const { field, bench, promoted } = fillFieldPool(
+      yesPool, subPool, fieldCapacity, defaultFormationFor(match.teamSize),
     );
+    await executeBuild(field, bench, promoted);
   }
 
   function buildKadroMessage(): string {

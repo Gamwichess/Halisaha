@@ -19,6 +19,12 @@
 - [ ] **`match_lineups`'a hiç `bench` satırı yazılmamış** — bu oturumda veri incelenirken fark edildi: 24 açıklanmış kadronun HEPSİ sadece `lineup='field'`, tek bir bench satırı yok. DURUM.md eskiden "field/bench yazılır" diyordu ama veri öyle demiyor. Yukarıdaki yedek yerleştirme maddesiyle ilgili olabilir — `saveLineupToSupabase`'e bakılacak.
 
 ## Sıradaki İşler (acelesi yok ama sırada)
+- [ ] **Takımım'da oyuncu silme/atma — kaptan + yardımcıya açılsın**. İstenen: hem **Kemik Kadro** hem **Jokerler** sekmesinden oyuncu silinebilsin/atılabilsin.
+  Mevcut durum (işe başlarken buradan devam et):
+  - Üyeler için `showMemberActionMenu` VAR (`index.tsx:3488`) ve içinde "Takımdan çıkar 🚪" (`handleRemoveMember`) mevcut — ama menü **yalnızca `isCaptain`** koşuluyla açılıyor (üye listesindeki `⋯` butonu). **`amIManager` yapılmalı** ki yardımcı da kullanabilsin.
+  - Yardımcı için hangi işlemler açık olmalı, karar gerekiyor: "Kaptanlığı devret" ve "Yardımcı kaptan yap" muhtemelen kaptana özel kalmalı; yalnızca "Takımdan çıkar" yardımcıya açılmalı.
+  - **Jokerler (misafir) için silme HİÇ YOK** — `guest_players` tablosundan silen bir fonksiyon yok, sıfırdan yazılacak (`handleDeleteGuest` + joker kartında `⋯`/uzun bas menüsü).
+  - ⚠️ Misafir silinince `match_lineups` / `player_ratings` içindeki `guest_id` referanslarına ne olacağına bakılmalı (cascade var mı, yoksa geçmiş kadrolar bozulur mu).
 - [ ] **Oyuncu detay menüsü UI**: Oyuncuya tıklayınca açılan menü referans görseldeki gibi görünmeli — mevcut UI kötü. (⚠️ Referans görsel işe başlarken kullanıcıdan alınacak — görsel olmadan başlanamaz.)
 - [ ] **Maç hatırlatıcı bildirimi**: Maç saati yaklaşınca push/local bildirim. Kaç saat önce ve açık/kapalı kullanıcı ayarı olmalı. (expo-notifications local schedule; ayar `@pollSettings` benzeri saklanır.)
 
