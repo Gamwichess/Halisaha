@@ -2071,7 +2071,11 @@ export default function Index() {
       .select('*')
       .eq('team_id', teamId)
       .order('name');
-    setGuestPlayers(data || []);
+    // is_active filtresi SORGUDA değil burada: kolon yumuşak-silme migration'ıyla
+    // geldi; sorguya koyarsak migration uygulanmamış DB'de sorgu komple patlar ve
+    // joker listesi boşalır (takım kimliğinde aynı hataya düşmüştük). Kolon yoksa
+    // undefined gelir, `!== false` sayesinde oyuncu listede kalır.
+    setGuestPlayers((data || []).filter((g: any) => g.is_active !== false));
   }
 
   // Detaylı (pozisyon bazlı) nitelik formunu bir oyuncu için açar
@@ -3485,19 +3489,88 @@ export default function Index() {
     );
   }
 
+  // Misafir (joker) silme. İKİ MODLU — çünkü match_lineups.guest_id'de FK var:
+  //  - Hiç maça çıkmamış / oylanmamış misafir → SERT silinir (kayıt tamamen gider).
+  //  - Geçmişi olan misafir → YUMUŞAK silinir (is_active=false). Sert silmek
+  //    geçmiş kadro satırlarını uçurur; o satırlar hem maç geçmişi hem de takım
+  //    çeşitliliği algoritmasının "kim kiminle oynadı" verisi (fetchPairWeights).
+  async function handleDeleteGuest(guest: any) {
+    if (!myTeamInfo?.id || !guest?.id) return;
+    const name = guest.name || 'bu joker';
+
+    // Geçmiş var mı? (head:true → satır çekmeden sadece sayı)
+    let hasHistory = true;
+    try {
+      const [lineups, ratings] = await Promise.all([
+        supabase.from('match_lineups').select('id', { count: 'exact', head: true }).eq('guest_id', guest.id),
+        supabase.from('player_ratings').select('id', { count: 'exact', head: true }).eq('rated_guest_id', guest.id),
+      ]);
+      hasHistory = (lineups.count ?? 0) > 0 || (ratings.count ?? 0) > 0;
+    } catch {
+      // Sayamadıysak güvenli tarafta kal: geçmişi varmış gibi davran (yumuşak sil).
+      hasHistory = true;
+    }
+
+    Alert.alert(
+      'Jokeri Çıkar',
+      hasHistory
+        ? `${name} daha önce maça çıkmış. Listeden kaldırılacak ama geçmiş kadro kayıtları korunacak.`
+        : `${name} hiç maça çıkmamış. Kaydı tamamen silinecek.`,
+      [
+        { text: 'İptal', style: 'cancel' },
+        {
+          text: 'Evet, Çıkar',
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              const { error } = hasHistory
+                ? await supabase.from('guest_players').update({ is_active: false }).eq('id', guest.id)
+                : await supabase.from('guest_players').delete().eq('id', guest.id);
+              if (error) throw error;
+              setGuestPlayers(prev => prev.filter(g => g.id !== guest.id));
+              // Kadroda/yedekte duruyorsa oradan da düşür — bayat kadro kalmasın
+              setSavedTeamA(prev => prev.filter((p: any) => p.id !== guest.id));
+              setSavedTeamB(prev => prev.filter((p: any) => p.id !== guest.id));
+              setSavedSubstitutes(prev => prev.filter((p: any) => p.id !== guest.id));
+              if (selectedPlayerCard?.id === guest.id) setSelectedPlayerCard(null);
+            } catch (err: any) {
+              Alert.alert('Hata', err.message);
+            }
+          },
+        },
+      ]
+    );
+  }
+
+  function showGuestActionMenu(guest: any) {
+    Alert.alert(guest.name || 'Joker', 'Yapmak istediğin işlemi seç:', [
+      { text: '🎯 Mevki & Nitelikleri Düzenle', onPress: () => openAttrModal(guest, true) },
+      { text: 'Takımdan çıkar 🚪', style: 'destructive', onPress: () => handleDeleteGuest(guest) },
+      { text: 'İptal', style: 'cancel' },
+    ]);
+  }
+
   function showMemberActionMenu(member: any) {
     const memberName = member.display_name || 'Oyuncu';
     const memberRole = (member.role as TeamMemberRole) || 'player';
     const buttons: Array<{ text: string; onPress?: () => void; style?: 'cancel' | 'destructive' | 'default' }> = [];
 
-    if (memberRole === 'player') {
-      buttons.push({ text: 'Yardımcı kaptan yap 🔑', onPress: () => handleSetMemberRole(member, 'deputy') });
-    } else if (memberRole === 'deputy') {
-      buttons.push({ text: 'Yetkisini al', onPress: () => handleSetMemberRole(member, 'player') });
+    // YETKİ DEVRİ İŞLEMLERİ SADECE KAPTANA AİT. Yardımcı bu menüyü açabilir
+    // (oyuncu çıkarabilsin diye) ama yardımcı atayamaz, yetki alamaz ve
+    // kaptanlığı devredemez — aksi halde yardımcı kendini kaptan yapabilirdi.
+    if (isCaptain) {
+      if (memberRole === 'player') {
+        buttons.push({ text: 'Yardımcı kaptan yap 🔑', onPress: () => handleSetMemberRole(member, 'deputy') });
+      } else if (memberRole === 'deputy') {
+        buttons.push({ text: 'Yetkisini al', onPress: () => handleSetMemberRole(member, 'player') });
+      }
+      buttons.push({ text: 'Kaptanlığı devret ⚡', style: 'destructive', onPress: () => handleTransferCaptaincy(member) });
     }
 
-    buttons.push({ text: 'Kaptanlığı devret ⚡', style: 'destructive', onPress: () => handleTransferCaptaincy(member) });
-    buttons.push({ text: 'Takımdan çıkar 🚪', style: 'destructive', onPress: () => handleRemoveMember(member) });
+    // Yardımcı kaptanı takımdan çıkaramaz.
+    if (isCaptain || memberRole !== 'captain') {
+      buttons.push({ text: 'Takımdan çıkar 🚪', style: 'destructive', onPress: () => handleRemoveMember(member) });
+    }
     buttons.push({ text: 'İptal', style: 'cancel' });
 
     Alert.alert(memberName, 'Yapmak istediğin işlemi seç:', buttons);
@@ -5437,7 +5510,7 @@ export default function Index() {
                           </View>
                           <Text style={{ fontSize: 20, color: COLORS.border, marginRight: 4 }}>›</Text>
                         </TouchableOpacity>
-                        {isCaptain && memberId !== myUserId && (
+                        {amIManager && memberId !== myUserId && (
                           <TouchableOpacity
                             onPress={() => showMemberActionMenu(member)}
                             style={{ paddingHorizontal: 8, paddingVertical: 4 }}
@@ -5461,35 +5534,45 @@ export default function Index() {
                   </View>
                 ) : (
                   guestPlayers.map(guest => (
-                    <TouchableOpacity
-                      key={guest.id}
-                      style={s.playerCard}
-                      onPress={() => {
-                        setSelectedPlayerCard(guest);
-                        setCardIsGuest(true);
-                      }}
-                    >
-                      <View style={[s.avatar, { backgroundColor: '#FEF3C7' }]}>
-                        <Text style={[s.avatarText, { color: '#92400E' }]}>{guest.name[0]}</Text>
-                      </View>
-                      <View style={{ flex: 1, marginLeft: 12 }}>
-                        <Text style={s.playerName}>{guest.name}</Text>
-                        <View style={{ flexDirection: 'row', gap: 6, marginTop: 4 }}>
-                          <View style={{ backgroundColor: COLORS.warningLight, paddingHorizontal: 7, paddingVertical: 2, borderRadius: 6 }}>
-                            <Text style={{ fontSize: 11, fontWeight: '700', color: '#92400E' }}>{positionLabel(guest.primary_position || guest.position)}</Text>
-                          </View>
-                          <View style={{ backgroundColor: '#FEF3C7', paddingHorizontal: 7, paddingVertical: 2, borderRadius: 6 }}>
-                            <Text style={{ fontSize: 11, fontWeight: '600', color: '#92400E' }}>Misafir</Text>
-                          </View>
-                          <View style={{ backgroundColor: COLORS.bg, paddingHorizontal: 7, paddingVertical: 2, borderRadius: 6, borderWidth: 1, borderColor: COLORS.border }}>
-                            <Text style={{ fontSize: 11, fontWeight: '700', color: COLORS.textMuted }}>
-                              {guest.overall_rating != null ? Number(guest.overall_rating) : computeOverall(guest.attributes, guest.primary_position, guest.secondary_position)} OVR
-                            </Text>
+                    <View key={guest.id} style={[s.playerCard, { paddingRight: 8 }]}>
+                      <TouchableOpacity
+                        style={{ flex: 1, flexDirection: 'row', alignItems: 'center' }}
+                        onPress={() => {
+                          setSelectedPlayerCard(guest);
+                          setCardIsGuest(true);
+                        }}
+                      >
+                        <View style={[s.avatar, { backgroundColor: '#FEF3C7' }]}>
+                          <Text style={[s.avatarText, { color: '#92400E' }]}>{guest.name[0]}</Text>
+                        </View>
+                        <View style={{ flex: 1, marginLeft: 12 }}>
+                          <Text style={s.playerName}>{guest.name}</Text>
+                          <View style={{ flexDirection: 'row', gap: 6, marginTop: 4 }}>
+                            <View style={{ backgroundColor: COLORS.warningLight, paddingHorizontal: 7, paddingVertical: 2, borderRadius: 6 }}>
+                              <Text style={{ fontSize: 11, fontWeight: '700', color: '#92400E' }}>{positionLabel(guest.primary_position || guest.position)}</Text>
+                            </View>
+                            <View style={{ backgroundColor: '#FEF3C7', paddingHorizontal: 7, paddingVertical: 2, borderRadius: 6 }}>
+                              <Text style={{ fontSize: 11, fontWeight: '600', color: '#92400E' }}>Misafir</Text>
+                            </View>
+                            <View style={{ backgroundColor: COLORS.bg, paddingHorizontal: 7, paddingVertical: 2, borderRadius: 6, borderWidth: 1, borderColor: COLORS.border }}>
+                              <Text style={{ fontSize: 11, fontWeight: '700', color: COLORS.textMuted }}>
+                                {guest.overall_rating != null ? Number(guest.overall_rating) : computeOverall(guest.attributes, guest.primary_position, guest.secondary_position)} OVR
+                              </Text>
+                            </View>
                           </View>
                         </View>
-                      </View>
-                      <Text style={{ fontSize: 20, color: COLORS.border }}>›</Text>
-                    </TouchableOpacity>
+                        <Text style={{ fontSize: 20, color: COLORS.border, marginRight: 4 }}>›</Text>
+                      </TouchableOpacity>
+                      {/* Üye kartındaki ⋯ ile aynı desen — kaptan + yardımcı */}
+                      {amIManager && (
+                        <TouchableOpacity
+                          onPress={() => showGuestActionMenu(guest)}
+                          style={{ paddingHorizontal: 8, paddingVertical: 4 }}
+                        >
+                          <Text style={{ fontSize: 22, color: COLORS.textMuted, fontWeight: '700' }}>⋯</Text>
+                        </TouchableOpacity>
+                      )}
+                    </View>
                   ))
                 )
               )}
