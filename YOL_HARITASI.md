@@ -37,14 +37,13 @@ Uzun bir refactor'a yarım kalmış işle girilmez; refactor bir şeyi bozarsa n
 Bu faz olmadan her ekran ayrı ayrı güzelleşir ve yamalı bohça çıkar.
 **Karar: sıfırdan yeni görsel kimlik** → önüne ayrı bir kimlik turu eklendi (1.0), faz uzadı.
 
-- [ ] **1.0 Kimlik turu** (yeni — token'lardan ÖNCE, çünkü token'lar kimliğin çıktısı)
-      - Yön/ton belirleme: ciddi-sportif mi, samimi-mahalle mi, teknik-veri odaklı mı
-      - Palet: marka rengi + nötr ölçek + semantik renkler (başarı/uyarı/hata)
-      - Tipografi: sistem fontu mu, özel font mu (`expo-font` kurulu; özel font = font dosyaları + yükleme adımı)
-      - Bileşen dili: köşe yumuşaklığı, gölge derinliği, yoğunluk, ikon stili
-      - 2-3 yön 1-2 ekran üstünde denenip seçilir (ana ekran + saha ekranı en ayırt edici olanlar)
-      - ⚠️ **Karar noktası:** `DEFAULT_TEAM_COLOR = '#22C55E'` değişirse yalnızca YENİ takımları etkiler; mevcut `teams.color` kayıtları durur. Toplu güncelleme istenirse ayrı iş.
-- [ ] **1.1 Tasarım token'ları** — `constants/theme.ts` şu an Expo şablonundan kalma ve hiç kullanılmıyor; 1.0'ın çıktısıyla gerçek hale getirilir: renk ölçeği, spacing, radius, gölge, tipografi.
+- [x] **1.0 Kimlik turu** ✅ **"SAHA GECESİ" SEÇİLDİ** (2026-08-16)
+      Gece oynanan maç: koyu yeşil-siyah zemin, floodlight lime vurgu, yüksek kontrast, sinematik.
+      **Koyu tema ayrı bir mod DEĞİL — kimliğin kendisi.** İleride istenirse AÇIK tema opsiyonel eklenti olur.
+      📐 Görsel şartname (palet + tipografi + bileşen dili + 2 ekran maketi):
+      https://claude.ai/code/artifact/5d60e8d8-7c61-43ed-870a-d7908f3d682c
+- [x] **1.1 Tasarım token'ları** ✅ `constants/theme.ts` yazıldı — semantik renkler, spacing, radius, elevation, tipografi ölçeği, `alpha()`. `npx tsc --noEmit` temiz.
+      Eski `Colors`/`Fonts` export'ları bırakıldı: Expo şablonundan kalan dosyalar (`explore.tsx`, `modal.tsx`, `themed-text`, `themed-view`) onları import ediyor. Uygulamanın kendisi kullanmıyor.
       ⚠️ A/B takım renkleri (`#3B82F6` / `#10B981`) semantiktir, kimlik değişse de dokunulmaz — bkz. DURUM.md "Takım Kimliği".
 - [ ] **1.2 Ortak bileşenler** — `Card`, `Button` (primary/secondary/ghost/danger), `Chip`, `SectionHeader`, `EmptyState`, `ListRow`, `Badge`, `Sheet`, `Segmented` (pill tab), `Avatar`, `IconTile` (pastel ikon kutusu)
 - [ ] **1.3 İkon katmanı** — `@expo/vector-icons` zaten kurulu, **yeni bağımlılık yok**. `Icon` sarmalayıcı + emoji→ikon eşleme tablosu. (Emoji ikonlar şu an en büyük "amatör" sinyali.)

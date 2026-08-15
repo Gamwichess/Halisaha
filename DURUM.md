@@ -47,6 +47,21 @@
 - **2026-07-30/31**: TestFlight rebuild 1.0.2→1.0.3, build #8 alındı ve `--auto-submit --non-interactive` ile ASC'ye submit edildi (`ascAppId: 169829` sayesinde sorunsuz).
 - **2026-07-24**: Maç otomatik bitince oylama gelmeme bug'ının kök nedeni bulundu+düzeltildi (⏳ hâlâ doğrulanacak); pull-to-refresh'e `fetchOpenRatingMatch`; nitelik girişi scroll zıplaması (bu oturumda tamamen elden geçti); paylaşımda maç bilgisi saha görseline şerit olarak basıldı; maç oluşturunca home'a dönüş; ana takım / "takımda değilsiniz" bug'ı (`@mainTeamId` mimarisi).
 
+## Tasarım Sistemi — "Saha Gecesi" (kalıcı notlar — YENİ)
+- **Kimlik**: gece oynanan halı saha maçı. Koyu yeşil-siyah zemin, floodlight lime vurgu (`#C6FF3D`), yüksek kontrast, sinematik. 2026-08-16'da seçildi (Faz 1.0).
+- **⚠️ KOYU TEMA AYRI BİR MOD DEĞİL — kimliğin kendisi.** "Açık tema + opsiyonel koyu" değil; uygulama koyu. İleride istenirse AÇIK tema opsiyonel eklenti olur. Renkler bu yüzden semantik isimlerle tanımlı (`bg`/`surface`/`text`/`accent`), ham hex değil — ikinci tema eklemek ekranları yeniden yazmayı gerektirmesin.
+- **Tek kaynak `constants/theme.ts`**: `colors`, `team`, `spacing`, `radius`, `elevation`, `type`, `motion`, `alpha()`. **Ekranlarda inline hex/spacing YAZILMAZ.**
+- **Nötrler gri DEĞİL** — hepsinde çim yeşili tonu var, böylece zemin "koyu arayüz" değil "gece sahası" okunuyor.
+- **Koyu temada gölge çalışmaz** (siyah zeminde siyah gölge görünmez). Yükseklik iki şeyle verilir: yüzeyi bir kademe açmak + ince kenar çizgisi. `elevation.flat` / `.raised` bunu yapar. `elevation.glow` yalnızca birincil eylemde — iOS'ta `shadowColor`, Android renkli gölgeyi desteklemediği için orada kenarla telafi ediliyor.
+- **Lime çok parlak**: üzerine yazılan metin KOYU olmalı (`colors.accentInk`), beyaz değil.
+- **Tipografi** şu an sistem fontu (SF Pro / Roboto) ağır kesimlerle — sıfır bağımlılık. `type.display` slotu ileride kondense başlık fontu takmak için ayrıldı (`expo-font` zaten kurulu), tek yerden değişir.
+- **Eski `Colors`/`Fonts` export'ları duruyor** — Expo şablonundan kalan `explore.tsx`, `modal.tsx`, `themed-text`, `themed-view` onları import ediyor. Uygulama kullanmıyor; o dosyalar temizlenince silinecek.
+- 📐 Görsel şartname: https://claude.ai/code/artifact/5d60e8d8-7c61-43ed-870a-d7908f3d682c
+- **⚠️ DOĞRULANACAK RİSKLER**:
+  - **Gündüz okunabilirliği (YÜKSEK)** — uygulama sahada, açık havada, bazen güneş altında açılıyor. İlk gerçek test DIŞARIDA yapılmalı. Sorun çıkarsa zemini bir kademe açmak yeter; token'lar semantik olduğu için ekranlar yeniden yazılmaz.
+  - **`team.B` (#10B981) yeşili**, `colors.success` (#22E07A) ve koyu yeşil saha zeminiyle aynı ailede. A/B ayrımı Faz 2.6'da doğrulanacak. Takım renkleri sabit → çözüm rengi değil MUAMELEYİ değiştirmek (dolu rozet + koyu metin).
+  - **Paylaşım görseli** koyu zeminde WhatsApp'a düşüyor; çim dokusu ve ışıma sıkıştırmadan sonra nasıl duruyor, gerçek paylaşımla test edilmeli.
+
 ## Takım Çeşitliliği Mimarisi (kalıcı notlar — YENİ)
 **Sorun**: Aynı çekirdek her hafta aynı tarafta oynuyordu. İki ayrı sebep vardı:
 1. `buildBalancedTeams` **tamamen deterministikti** — rating'e göre sıralayıp hep `scoreA <= scoreB` kuralıyla dağıtıyordu. Aynı havuz = birebir aynı kadro. (Kullanıcı doğruladı: aynı oyuncularla kurunca 30 Temmuz'un kadrosunu aynen veriyordu.)
@@ -127,7 +142,8 @@
 ## Devam Eden / Yarım Kalan İş
 - **📋 YOL HARİTASI**: 2026-08-16'da Altıpas (rakip, v2.0.0) analizinden kapsamlı bir faz planı çıkarıldı → **`YOL_HARITASI.md`**. Tasarım yenileme (sıfırdan yeni kimlik), i18n, Tier 0/1/2/3 sırası orada. Şu an **Faz 0** (mevcut borcu kapatma) yürüyor.
 - **✅ FAZ 0 TAMAMLANDI** (2026-08-16): migration uygulanmış (REST doğrulaması), 1.0.6/#10 build'i alınmış (`FINISHED`), ve **iki özellik test edildi — çalışıyor** (kullanıcı doğruladı): eksik kadroyu yedeklerden otomatik tamamlama + oyuncu çıkarma/joker silme. Migration ve build maddeleri DURUM.md'de bayat kalmıştı, düzeltildi.
-- **▶️ SIRADAKİ: Faz 1.0 — kimlik turu.** Sıfırdan yeni görsel kimlik (yön/ton → palet → tipografi → bileşen dili), 2-3 yön ana ekran + saha ekranı üstünde denenip seçilecek. Koda dokunmayan faz.
+- **✅ Faz 1.0 + 1.1 TAMAM** (2026-08-16): "Saha Gecesi" kimliği seçildi, `constants/theme.ts` token sistemi yazıldı (tsc temiz). Aşağıda "Tasarım Sistemi" mimari notu.
+- **▶️ SIRADAKİ: Faz 1.2–1.3** — ortak bileşenler (`Card`, `Button`, `Chip`, `SectionHeader`, `EmptyState`, `ListRow`, `Badge`, `Sheet`, `Segmented`, `Avatar`, `IconTile`) + emoji yerine `@expo/vector-icons` (zaten kurulu, yeni bağımlılık yok). Görsel şartname artifact'ta hazır. Sonra 1.4 i18n iskeleti, sonra Faz 2.1 Ayarlar ekranı.
   - (a) Nitelik formu scroll'u — Kondisyon klavye altında kalıyor mu, boşluğa tıklayınca zıplıyor mu
   - (b) V1/V2/V3 varyasyon geçişi — sahada anlık değişiyor mu, formasyonu bozmuyor mu
   - (c) Otomatik formasyon önerisi — gerçek yoklamada makul mü (maç kurarken artık formasyon SORULMUYOR)
