@@ -23,29 +23,36 @@
 - Maç sonu istatistik girişi + toplam gol gösterimi; pull-to-refresh tüm ekranlarda
 - Çok takımlı kullanım: takım scope'u düzgün izole; **ana takım seçimi** kalıcı (`@mainTeamId`)
 - **Takım çeşitliliği + varyasyon sistemi ÇALIŞIYOR** (bu oturum — aşağıda mimari not)
-- **Otomatik formasyon önerisi ÇALIŞIYOR** (bu oturum — aşağıda mimari not)
+- **Otomatik formasyon önerisi ÇALIŞIYOR** (aşağıda mimari not)
 - **Takım kimliği ÇALIŞIYOR** (logo + isim + marka rengi; migration uygulandı, kullanıcı test etti — aşağıda mimari not)
+- **Tasarım sistemi KURULDU** — "Saha Gecesi" kimliği + `constants/theme.ts` token'ları (henüz hiçbir ekrana uygulanmadı; aşağıda mimari not)
 
-## Son Oturumda Yapılanlar (2026-07-31 / 08-01)
-1-7 tamamı `app/(tabs)/index.tsx` içinde, DB şeması değişmedi. 8-9 takım kimliği işi (migration VAR, uygulandı).
+## Son Oturumda Yapılanlar (2026-08-16)
+Bu oturumda **koda neredeyse hiç dokunulmadı** — strateji, planlama ve tasarım altyapısı oturumuydu. Tek kod değişikliği `constants/theme.ts`.
 
-1. **Nitelik formu scroll düzeltmesi** — `KeyboardAwareScrollView` kaldırıldı (paket artık hiçbir yerde kullanılmıyor, `package.json`'da duruyor). İki bug birden çözüldü: (a) boşluğa tıklayınca listenin en üste zıplaması → KAS'ın klavye kapanınca `resetScrollToCoords` ile başa sarmasıydı; (b) Kondisyon'un klavye altında kalması → sabit `maxHeight: 440` yüzündendi. Yerine: sheet `KeyboardAvoidingView` ile klavyenin üstüne kalkıyor + liste `flexShrink: 1`.
-2. **Mevki listeleri düzeltildi** — profil ve profil-tamamlama ekranları artık `SKILL_POSITIONS` (6 mevki, Ön Libero + Forvet Arkası dahil) kullanıyor. `main_position` artık KOD saklıyor (`ON_LIBERO`); gösterim için `positionLabel()` helper'ı eklendi (eski `KL/DEF/ORT/FOR` kayıtları olduğu gibi görünür). Oyuncu listelerinde `primary_position` önceliklendiriliyor.
-3. **Misafir eklerken mevki sorulmuyor** — nitelik formunda zaten seçiliyor. `newGuestPos` state'i silindi; DB'ye legacy `position: 'ORT'` varsayılanı yazılıyor.
-4. **Takım çeşitliliği sistemi** (asıl büyük iş) — aşağıda mimari not.
-5. **Varyasyon seçimi (V1/V2/V3 + 🔄 Yeni)** — saha görünümünde.
-6. **Otomatik formasyon önerisi** — maç oluşturma/düzenlemedeki formasyon seçici KALDIRILDI.
-7. **Buton birleştirme** — "Dengeli Kur" + "Rastgele Kur" → tek **⚡ Kadroları Kur**. `buildRandomTeams` ve `handleBuildRandom` silindi.
-8. **Takım kimliği** (logo + isim + marka rengi) — migration `20260801120000_team_identity.sql` yazıldı ve **uygulandı** (`npx supabase db push`). Kullanıcı test etti, çalışıyor. Aşağıda mimari not.
-9. **Sürüm 1.0.4 + `/guncelle` düzeltmesi** — komut artık sürümü sormadan patch +1 yapıp commit/push ediyor (`.claude/commands/guncelle.md`).
-10. **`/checkpoint` komutu + ilk checkpoint** — `checkpoint-2026-08-01-01` tag'i atıldı ve push edildi.
-11. **TestFlight build 1.0.5 / #9** — sürüm 1.0.4→1.0.5, build alındı ve submit edildi. Non-interactive submit sorunsuz, bu sefer Apple 401 uyarısı da çıkmadı.
-12. **Eksik kadroyu yedeklerden otomatik tamamlama** (`fillFieldPool`) — aşağıda mimari not.
-13. **Oyuncu çıkarma / joker silme** — üye `⋯` menüsü yardımcıya açıldı (yetki devri kaptanda kaldı), jokerler için silme sıfırdan yazıldı. Migration `20260801160000_guest_soft_delete.sql` — **UYGULANDI** (2026-08-16'da REST ile doğrulandı: `guest_players.is_active` kolonu DB'de var).
+1. **Rakip analizi** — Kullanıcı `SS/referans/` altına **Altıpas v2.0.0**'ın 24 ekranını koydu; hepsi incelendi. Altıpas bir takım yönetim aracı DEĞİL, yerel futbol **pazaryeri/sosyal ağı** (Transfer Pazarı, Rakip Bul, Oyuncu Bul, Topluluklar, turnuvalar). Ölçek sinyali: Ankara'da 842 oyuncu, 101 rakip ilanı.
+2. **Karşılaştırmalı değerlendirme** — Biz algoritma derinliğinde (çeşitlilik, formasyon, OVR) öndeyiz; onlar ürün olgunluğu ve dağıtımda 2-3 tur önde (onboarding, i18n, Hesabı Sil, granular bildirim, boş durumlar, gerçek ikon seti). Tutma olasılığı tahmini: onboard olan takımda %60-70, organik yayılma %10-15 (ağ etkisi yok, yalnız kullanıcı için 1. gün değeri sıfır). **Stratejik karar: pazaryerini taklit ETME**, "en adil kadroyu kuran uygulama" konumlandırmasında derinleş.
+3. **`YOL_HARITASI.md` oluşturuldu** — Faz 0-7 uygulama sırası. Aşağıda "Yol Haritası" notu.
+4. **Faz 0 kapatıldı** — Bekleyen sanılan iki iş aslında YAPILMIŞTI, dokümanlar bayattı: migration REST ile doğrulandı (kolon var), 1.0.6/#10 build'i EAS'te `FINISHED` bulundu. Kullanıcı iki özelliğin test edildiğini ve çalıştığını doğruladı.
+5. **`checkpoint-2026-08-16-01`** — tasarım turundan önceki son temiz hal, push edildi.
+6. **Faz 1.0 — "Saha Gecesi" kimliği seçildi.** Üç yön sunuldu (saha gecesi / stadyum / mahalle), koyu-sinematik seçildi. Aşağıda mimari not.
+7. **Faz 1.1 — `constants/theme.ts` token sistemine dönüştürüldü.** `tsc` temiz.
+8. **Görsel şartname yayımlandı** (palet + tipografi + bileşen dili + ana ekran/saha maketleri): https://claude.ai/code/artifact/5d60e8d8-7c61-43ed-870a-d7908f3d682c
 
 ## Geçmiş Oturumlar (özet)
+- **2026-07-31 / 08-01**: Takım çeşitliliği sistemi (asıl büyük iş) + V1/V2/V3 varyasyon seçimi + otomatik formasyon önerisi + "Dengeli/Rastgele Kur" tek butona indirildi. Takım kimliği (logo/isim/renk, migration uygulandı). Nitelik formu scroll düzeltmesi (`KeyboardAwareScrollView` kaldırıldı). Profil mevki listeleri 6'lı `SKILL_POSITIONS`'a geçti + `positionLabel()`. Misafir eklerken mevki sorulmuyor. `fillFieldPool` (eksik kadroyu yedeklerden tamamlama). Oyuncu çıkarma / joker silme (iki modlu). `/checkpoint` komutu + `/guncelle` sürüm bump düzeltmesi. TestFlight 1.0.5/#9. Tümünün mimari notları aşağıda.
 - **2026-07-30/31**: TestFlight rebuild 1.0.2→1.0.3, build #8 alındı ve `--auto-submit --non-interactive` ile ASC'ye submit edildi (`ascAppId: 169829` sayesinde sorunsuz).
 - **2026-07-24**: Maç otomatik bitince oylama gelmeme bug'ının kök nedeni bulundu+düzeltildi (⏳ hâlâ doğrulanacak); pull-to-refresh'e `fetchOpenRatingMatch`; nitelik girişi scroll zıplaması (bu oturumda tamamen elden geçti); paylaşımda maç bilgisi saha görseline şerit olarak basıldı; maç oluşturunca home'a dönüş; ana takım / "takımda değilsiniz" bug'ı (`@mainTeamId` mimarisi).
+
+## Yol Haritası Mimarisi (kalıcı notlar — YENİ)
+Sıralamanın gerekçeleri; `YOL_HARITASI.md` fazların kendisini tutar, buradakiler NEDEN öyle sıralandığı.
+- **Konumlandırma kararı**: Altıpas'ın pazaryeri modeli TAKLİT EDİLMEYECEK. Boş bir pazaryeri, pazaryeri olmamasından kötüdür ve onların 842 oyunculuk topluluğuyla aynı tahtada oynamak kaybedilen bir savaş. Bizim savunulabilir yerimiz **"en adil kadroyu kuran uygulama"** — çeşitlilik + formasyon + OVR algoritmaları. Altıpas bunu bir eğlence modülü ("Kadro Dene") olarak pazarlıyor, biz ürünün tamamı yapmışız.
+- **i18n altyapısı BAŞTA, çevirisi SONDA.** İkisi de aynı 5.879 satıra dokunuyor. Altyapı tek dosyalık ucuz bir iş (Faz 1.4); Faz 2'den itibaren yenilenen her ekran doğrudan `t()` ile yazılıyor — o JSX zaten baştan yazıldığı için marjinal maliyet ~sıfır. Faz 4 yalnızca dokunulmamış artıkları süpürüp EN'i dolduruyor. İngilizceyi başa almak da sona bırakmak da aynı satırlara iki kez dokunmak demekti.
+- **Tier 0 ayrı faz DEĞİL, Ayarlar ekranına gömülü** (Faz 2.1). Hesabı Sil / Gizlilik / Koşullar / Destek zaten orada yaşıyor. **RLS istisna** — Faz 6, ağ katmanından hemen önce: özellikler otururken policy yazmak her yeni tabloda borç üretir, ama ağ = başkalarının verisi, RLS'siz asla.
+- **`index.tsx` ekran yenilendikçe bölünüyor** (big-bang refactor YOK). Her ekran yeniden yazılırken `screens/` altına taşınıyor; her adım bağımsız test edilebilir. Hedef: `screens/`, `components/ui/`, `i18n/`. **CLAUDE.md'deki "tek dosya SPA" notu her bölmede güncellenmeli.**
+- **Faz 2 ekran sırası**: küçük/izole → çok görülen → en özenli. Ayarlar ilk, çünkü en ucuz yerde üç şeyi birden ispatlıyor (tasarım + i18n + Tier 0). Saha/kadro ekranı en son, çünkü "wow" ekranı ve paylaşım görseli oradan çıkıyor.
+- **Bildirim motoru onboarding'den ÖNCE** (Faz 3.1 → 3.2): iOS izni bir kez sorar, priming ancak izin isteyecek bir şey varsa anlamlı.
+- **Tutma olasılığı tahmini** (2026-08-16): onboard olan takımda %60-70, organik yayılma %10-15. Ağ etkisi yok, yalnız indiren kullanıcı için 1. gün değeri sıfır. Yayın hijyeni (Hesabı Sil, push, boş durumlar, RLS) düzelirse ikincisi %30-35.
 
 ## Tasarım Sistemi — "Saha Gecesi" (kalıcı notlar — YENİ)
 - **Kimlik**: gece oynanan halı saha maçı. Koyu yeşil-siyah zemin, floodlight lime vurgu (`#C6FF3D`), yüksek kontrast, sinematik. 2026-08-16'da seçildi (Faz 1.0).
@@ -140,18 +147,25 @@
 - `switchTeam` / `handleCreateTeam` / `handleAcceptInvite` seçilen takımı `@mainTeamId`'ye yazar. Ayrılınan takım ana takımsa anahtar silinir, `fetchMyTeam` tekrar çağrılır.
 
 ## Devam Eden / Yarım Kalan İş
-- **📋 YOL HARİTASI**: 2026-08-16'da Altıpas (rakip, v2.0.0) analizinden kapsamlı bir faz planı çıkarıldı → **`YOL_HARITASI.md`**. Tasarım yenileme (sıfırdan yeni kimlik), i18n, Tier 0/1/2/3 sırası orada. Şu an **Faz 0** (mevcut borcu kapatma) yürüyor.
-- **✅ FAZ 0 TAMAMLANDI** (2026-08-16): migration uygulanmış (REST doğrulaması), 1.0.6/#10 build'i alınmış (`FINISHED`), ve **iki özellik test edildi — çalışıyor** (kullanıcı doğruladı): eksik kadroyu yedeklerden otomatik tamamlama + oyuncu çıkarma/joker silme. Migration ve build maddeleri DURUM.md'de bayat kalmıştı, düzeltildi.
-- **✅ Faz 1.0 + 1.1 TAMAM** (2026-08-16): "Saha Gecesi" kimliği seçildi, `constants/theme.ts` token sistemi yazıldı (tsc temiz). Aşağıda "Tasarım Sistemi" mimari notu.
-- **▶️ SIRADAKİ: Faz 1.2–1.3** — ortak bileşenler (`Card`, `Button`, `Chip`, `SectionHeader`, `EmptyState`, `ListRow`, `Badge`, `Sheet`, `Segmented`, `Avatar`, `IconTile`) + emoji yerine `@expo/vector-icons` (zaten kurulu, yeni bağımlılık yok). Görsel şartname artifact'ta hazır. Sonra 1.4 i18n iskeleti, sonra Faz 2.1 Ayarlar ekranı.
-  - (a) Nitelik formu scroll'u — Kondisyon klavye altında kalıyor mu, boşluğa tıklayınca zıplıyor mu
-  - (b) V1/V2/V3 varyasyon geçişi — sahada anlık değişiyor mu, formasyonu bozmuyor mu
-  - (c) Otomatik formasyon önerisi — gerçek yoklamada makul mü (maç kurarken artık formasyon SORULMUYOR)
-  - (d) Paylaşım görselinde takım logosu — `captureRef` uzak görsel yüklenmeden yakalarsa boş çıkabilir, **tek şüpheli nokta**
-  - (e) Yedek yerleştirme mevkiye göre mi
-  - (f) Maç kendi kendine bitince oylamanın otomatik açılması (önceki oturumdan devam, ileri saatli gerçek maç gerekiyor)
-  - Takım kimliği (logo/isim/renk) kullanıcı tarafından test edildi ✅ — ama başka bir kaptanın kendi takımında denemesi iyi olur.
-- Feedback gelince: düzeltmeler → `/checkpoint` → `/guncelle`.
+
+**📋 SIRA `YOL_HARITASI.md`'DE.** 2026-08-16'da Altıpas (rakip, v2.0.0) analizinden Faz 0-7 planı çıkarıldı. Aşağıdaki durum oraya göre okunmalı.
+
+- **✅ FAZ 0 TAMAM** (2026-08-16): migration uygulanmış, 1.0.6/#10 build'i alınmış, iki özellik test edildi ve çalışıyor.
+- **✅ FAZ 1.0 + 1.1 TAMAM** (2026-08-16): "Saha Gecesi" kimliği seçildi, `constants/theme.ts` token sistemi yazıldı (tsc temiz). Aşağıda "Tasarım Sistemi" mimari notu.
+- **▶️ SIRADAKİ İŞ — Faz 1.2–1.3**: ortak bileşenler (`Card`, `Button`, `Chip`, `SectionHeader`, `EmptyState`, `ListRow`, `Badge`, `Sheet`, `Segmented`, `Avatar`, `IconTile`) + emoji yerine `@expo/vector-icons` (zaten kurulu, YENİ BAĞIMLILIK YOK). Görsel şartname hazır (artifact linki yukarıda) — bileşen dili bölümü doğrudan şartname.
+  Sonra: **1.4** i18n iskeleti (`t()`, `tr.ts`, `@lang`) → **1.5** `screens/` deseni → **Faz 2.1** ilk gerçek ekran olarak Ayarlar.
+
+### Hâlâ test EDİLMEMİŞ olanlar (1.0.5/#9 ve 1.0.6/#10 ile sahaya çıktı)
+Bunlar tasarım turundan bağımsız; gerçek kullanımda doğrulanacak. Sorun çıkarsa Faz 1'i kesip düzeltilir.
+- (a) Nitelik formu scroll'u — Kondisyon klavye altında kalıyor mu, boşluğa tıklayınca zıplıyor mu
+- (b) V1/V2/V3 varyasyon geçişi — sahada anlık değişiyor mu, formasyonu bozmuyor mu
+- (c) Otomatik formasyon önerisi — gerçek yoklamada makul mü (maç kurarken artık formasyon SORULMUYOR)
+- (d) Paylaşım görselinde takım logosu — `captureRef` uzak görsel yüklenmeden yakalarsa boş çıkabilir, **tek şüpheli nokta**
+- (e) Yedek yerleştirme mevkiye göre mi
+- (f) Maç kendi kendine bitince oylamanın otomatik açılması — ileri saatli GERÇEK maç gerekiyor
+- Takım kimliği (logo/isim/renk) kullanıcı tarafından test edildi ✅ — başka bir kaptanın kendi takımında denemesi iyi olur.
+
+Feedback gelirse: düzeltmeler → `/checkpoint` → `/guncelle` (sürümü kendisi 1.0.7 yapar).
 
 ## Checkpoint / Geri Dönüş Noktaları
 - Kalıcı geri dönüş için **git tag** kullanılıyor (`checkpoint-YYYY-MM-DD-NN` biçimi), `/checkpoint` komutuyla alınır — bkz. `.claude/commands/checkpoint.md`.

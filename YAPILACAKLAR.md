@@ -4,19 +4,20 @@
 
 ## Aktif (şu an üstünde çalışılan)
 
-> 📋 **Sıra `YOL_HARITASI.md`'de.** Şu an **Faz 0** — mevcut borcu kapatma.
+> 📋 **Sıra `YOL_HARITASI.md`'de.** **Faz 0 ✅ · Faz 1.0 ✅ · Faz 1.1 ✅** → şu an **Faz 1.2**.
+> 📐 Görsel şartname: https://claude.ai/code/artifact/5d60e8d8-7c61-43ed-870a-d7908f3d682c
 
-- [x] ~~Bekleyen migration~~ — **UYGULANMIŞ** (2026-08-16 REST doğrulaması: `guest_players.is_active` var).
-- [x] ~~Build #9'da olmayan iki özellik~~ — **1.0.6 / build #10 alınmış** (commit `68cd0c0`, 2026-08-01, FINISHED). Özellikler test cihazlarında var.
-- [x] ~~1.0.6 / build #10 testi~~ — **TEST EDİLDİ, ÇALIŞIYOR** (kullanıcı doğruladı 2026-08-16): eksik kadroyu yedeklerden otomatik tamamlama + oyuncu çıkarma/joker silme. → **FAZ 0 TAMAMLANDI.**
-  - Nitelik formu: Kondisyon klavyenin altında kalıyor mu, boşluğa tıklayınca zıplıyor mu
-  - Profil + profil tamamlama: 6 mevki geliyor mu (Ön Libero / Forvet Arkası)
-  - Misafir ekleme: mevki sormuyor, sonra nitelik formundan giriliyor
-  - **V1/V2/V3 + 🔄 Yeni**: sahada anlık değişiyor mu, formasyonu bozuyor mu
-  - **Otomatik formasyon**: maç kurarken artık formasyon SORULMUYOR — sistem seçiyor, makul mü
-  - **Paylaşım görselinde logo**: `captureRef` uzak görsel yüklenmeden yakalarsa logo boş çıkabilir — tek şüpheli nokta
-  - Takım kimliği: sen test ettin ✅, başka bir kaptan kendi takımında denesin
-- [ ] Feedback gelince: düzeltmeler → `/checkpoint` → `/guncelle` (sürümü kendisi 1.0.7 yapar). Sonra **Faz 1'e geçilir** (kimlik turu + tasarım/i18n altyapısı).
+- [ ] **▶️ SIRADAKİ İŞ — Faz 1.2: ortak bileşenler.** `Card`, `Button` (primary/secondary/ghost/danger), `Chip`, `SectionHeader`, `EmptyState`, `ListRow`, `Badge`, `Sheet`, `Segmented`, `Avatar`, `IconTile`. Şartnamenin "Bileşen Dili" bölümü birebir bunun tarifi. Hepsi `constants/theme.ts` token'larını kullanacak — inline hex/spacing YASAK.
+- [ ] **Faz 1.3: emoji → `@expo/vector-icons`.** Zaten kurulu, yeni bağımlılık yok. `Icon` sarmalayıcı + emoji→ikon eşleme tablosu. (Emoji ikonlar şu an en büyük "amatör" sinyali.)
+- [ ] **Faz 1.4: i18n iskeleti.** `i18n/tr.ts`, `i18n/en.ts` (boş başlar), `useT()`, `@lang` AsyncStorage + cihaz dili varsayılanı. Bu andan sonra yazılan/yenilenen HER string `t()` ile.
+- [ ] **Faz 1.5: `screens/` deseni** — ilk ekran çıkarılarak ispatlanır.
+- [ ] **Faz 2.1: Ayarlar ekranı** — ilk gerçek ekran. Aynı anda tasarımı, i18n'i ve Tier 0'ı (Hesabı Sil + Gizlilik/Koşullar/Destek) ispatlıyor.
+
+### Faz 1 boyunca dikkat
+- [ ] **Gündüz okunabilirliği testi (YÜKSEK RİSK)** — koyu kimliğin tek gerçek zayıflığı. Uygulama sahada, açık havada, bazen güneş altında açılıyor. İlk ekran bittiğinde **dışarıda** bakılmalı. Sorun çıkarsa zemini bir kademe açmak yeter; token'lar semantik olduğu için ekranlar yeniden yazılmaz.
+- [ ] **`team.B` (#10B981) / `success` (#22E07A) / koyu yeşil zemin çakışması** — A/B ayrımı saha ekranında okunaklı kalıyor mu, Faz 2.6'da doğrula. Takım renkleri sabit → çözüm rengi değil MUAMELEYİ değiştirmek (dolu rozet + koyu metin).
+- [ ] **Paylaşım görseli koyu zeminde** — WhatsApp'ta çoğu kişi açık temada bakıyor; çim dokusu ve ışıma sıkıştırmadan sonra nasıl duruyor, gerçek paylaşımla test et.
+- [ ] **CLAUDE.md güncellemesi** — "tek dosya SPA" mimari notu, her ekran `screens/` altına çıktıkça güncellenmeli.
 
 ## Bilinen Buglar (takip et — durumları belirsiz, test edilecek)
 - [ ] **⏳ Otomatik maç-sonu oylama doğrulaması**: Otomatik bitiş düzeltmesi kodlandı ama geçmişe-dönük kurulan maçta tetiklenmiyor gibi. **İleri saatte gerçek bir maç** kurup, saati geçince oylamanın otomatik geldiğini doğrula. Test aşamasındaki arkadaşlardan feedback al. (Kod: `fetchActivePoll` zaman aşımı dalı + `onRefresh` home.)
@@ -28,18 +29,43 @@
 - [ ] **Maç hatırlatıcı bildirimi**: Maç saati yaklaşınca push/local bildirim. Kaç saat önce ve açık/kapalı kullanıcı ayarı olmalı. (expo-notifications local schedule; ayar `@pollSettings` benzeri saklanır.) → **Faz 3.1'de** yapılacak.
 
 ## Sonraya / Erken (UNUTTURMA — şimdi yapma, ama hatırlat)
-- [ ] **RLS'i aç** — public TestFlight/yayın ÖNCESİ zorunlu. Şu an kapalı. En kritik yayın-öncesi iş. (Erken: önce özellikler otursun. NOT: bu oturumda gerçek veriyi anon key ile okuyabildik — kapalı olduğunun canlı kanıtı.)
+
+### Yol haritasından gelenler (sırası `YOL_HARITASI.md`'de, burada unutturma notu)
+- [ ] **Tier 0 — yayın öncesi ZORUNLU** (→ Faz 2.1'de Ayarlar ekranına gömülü yapılacak):
+  - **Hesabı Sil** — Apple Guideline 5.1.1(v). Yoksa App Store **reddeder**. UI + cascade silen RPC birlikte.
+  - Gizlilik Politikası + Kullanım Koşulları + Destek linkleri.
+- [ ] **Tier 1 — Faz 2/3'e dağıtıldı**: onboarding carousel + bildirim izni priming (3.2), granular bildirim ayarları (3.1), boş durum kartları + "örnek maça bak" (2.3), profil tamamlanma halkası (2.2), profil zenginleştirme — fotoğraf/emoji avatar, @kullanıcı adı, isim gösterimi, doğum yılı, şehir/ilçe (2.2), Maçlar ekranı Aktif/Geçmiş + skor kartı (2.8), bildirim merkezi (2.9), davet kodu kartı (2.3).
+- [ ] **Tier 2 — Faz 5, ağa girmeden değer üretenler** (Erken: önce tasarım ve i18n otursun):
+  - 🔥 **Hızlı Maç Kur** — kadro listesini yapıştır → takımlar hazır. **En değerli çalma adayı**: çeşitlilik algoritmamızın vitrini, kayıtsız denenebilir, paylaşıma uygun.
+  - MVP oylaması (nitelik oylaması var, MVP kavramı yok — tek dokunuş, katılım artırır)
+  - Mini lig / sezon tablosu · Kadro Dene · "boş gün" modülü (penaltı/tahmin tarzı)
+- [ ] **Tier 3 — Faz 7 ağ katmanı. RLS OLMADAN BAŞLANMAZ.** Sıra dar ihtiyaçtan geniş olana: **Eksik Var** (tek maçlık eksik oyuncu ilanı — ağa buradan girilir, Transfer Pazarı'ndan değil) → Rakip Bul → Topluluklar/Keşfet → Sohbet → videolu Transfer Pazarı → uzak push altyapısı. (Erken: boş bir pazaryeri, pazaryeri olmamasından kötüdür.)
+- [ ] **i18n EN çevirisi** (Faz 4) — makine çevirisi + gözden geçirme mi, elle mi? Karar verilmedi, şu an bloklamıyor.
+- [ ] **Açık tema** — "Saha Gecesi" koyu bir kimlik; açık tema İSTENİRSE opsiyonel eklenti olarak sonradan gelir. Token'lar semantik yazıldığı için ekranlar yeniden yazılmaz. (Erken: önce koyu kimlik gerçek kullanımda otursun.)
+
+### Diğer
+- [ ] **RLS'i aç** — public TestFlight/yayın ÖNCESİ zorunlu, **Faz 6**. Şu an kapalı. En kritik yayın-öncesi iş. (Erken: önce özellikler otursun. NOT: 2026-08-16 oturumunda da gerçek veriyi anon key ile REST üzerinden okuyabildik — kapalı olduğunun canlı kanıtı.)
   - **Bu turda `team_logos` storage policy'lerini de daralt**: şu an "giriş yapmış herkes yazabilir". Olması gereken: sadece o takımın kaptanı/yardımcısı `teamId/` klasörüne yazabilsin. (`supabase/migrations/20260801120000_team_identity.sql` içine not düşüldü.)
 - [ ] **Mevcut oyuncuların OVR'ını toplu yeniden-hesapla** — nitelik sistemi değişti; eski satırların stored `overall_rating`'i ancak yeniden kaydedilince güncelleniyor. (Açık soru — gerçek veri az olduğu için acil değil.)
 - [ ] **Eski profillerin `main_position`'ı** — artık SkillPosition KODU saklanıyor (`ON_LIBERO`). Eskiden `DEF`/`FOR` kaydedilmiş profillerde profil ekranında hiçbir chip seçili görünmez, kullanıcı bir kez yeniden seçmeli. İşlevsel etkisi yok (takım kurma `team_members.primary_position` kullanıyor). İstenirse tek seferlik eşleme scripti yazılabilir.
 - [ ] **Çeşitlilik/varyasyon sabitlerinin ince ayarı** — gerçek kullanım oturunca gözden geçir: `DIVERSITY_LAMBDA` (off 0 / mid 8 / high 20), `VARIANT_SPREAD = 15`, `VARIANT_COUNT = 3`, `VARIANT_RESTARTS = 150`, `PAIR_HISTORY_MATCHES = 3`, `PAIR_DECAY = 0.65`. Varyasyon sayısını 4'e çıkarmak için sadece `VARIANT_COUNT` yeter, UI kendini ona göre çiziyor.
 - [ ] **Formasyon öneri sabitlerinin ince ayarı** — `SHORTAGE_WEIGHT.DEF = 1.5`, `EXTRA_STRIKER_COST = 3`, `NO_COVER_COST = 3`. Üç senaryoda doğrulandı ama gerçek kullanımda gözden geçir.
 - [ ] **`react-native-keyboard-aware-scroll-view` bağımlılığı** — kodda artık HİÇ kullanılmıyor, `package.json`'da duruyor. Temizlik istenirse kaldırılabilir (aceleye gerek yok).
-- [ ] **Sohbet / mesajlaşma özelliği** (emoji + GIF). Ayrı sistem: messages tablosu, realtime, emoji picker, Giphy/Tenor API. (Erken: en sona.)
+- [ ] **Sohbet / mesajlaşma özelliği** (emoji + GIF). Ayrı sistem: messages tablosu, realtime, emoji picker, Giphy/Tenor API. (Erken: en sona → **Faz 7.4**.)
 - [ ] **guestVotesLocal kalıcılığı**: misafirin "Kesin Var" işareti uygulama kapanınca sıfırlanıyor. Kalıcı yapılsın mı? (Açık soru.)
 - [ ] **POSITION_WEIGHTS ince ayarı** — yeni 6'lı sisteme göre makul varsayılanlarla kuruldu (SECONDARY_WEIGHT_FACTOR=0.5 dahil). Gerçek kullanım oturunca gözden geçir.
 - [ ] **Kondisyon çarpan aralığı (~0.90–1.05) ve OVR sabiti K (0.18)** — gerçek oylama verisi gelince ayarla.
 - [ ] **Supabase pause**: free tier 7 günde bir duraklıyor. Haftada 1 manuel dashboard girişiyle idare. Launch'a yakın Pro'ya geçiş düşünülebilir.
+
+## Tamamlananlar (2026-08-16)
+- [x] **Rakip analizi — Altıpas v2.0.0** — 24 ekran incelendi (`SS/referans/`). Onlar pazaryeri/sosyal ağ, biz araç. Biz algoritma derinliğinde öndeyiz, onlar ürün olgunluğu + dağıtımda 2-3 tur önde. Tutma olasılığı: onboard takımda %60-70, organik %10-15.
+- [x] **`YOL_HARITASI.md`** — Faz 0-7 uygulama sırası, gerekçeleriyle. İki temel karar: i18n altyapısı başta/çevirisi sonda; Tier 0 ayrı faz değil Ayarlar'a gömülü.
+- [x] **Faz 0 kapatıldı** — Bekleyen sanılan migration ve build'in ZATEN yapılmış olduğu doğrulandı (dokümanlar bayattı, düzeltildi). İki özellik test edildi, çalışıyor.
+- [x] **`checkpoint-2026-08-16-01`** — tasarım turundan önceki son temiz hal.
+- [x] **Faz 1.0 — "Saha Gecesi" kimliği seçildi.** Koyu tema ayrı bir mod değil, kimliğin kendisi.
+- [x] **Faz 1.1 — `constants/theme.ts` token sistemi.** Semantik renkler, spacing, radius, elevation, tipografi ölçeği, `alpha()`. `tsc` temiz.
+- [x] **Görsel şartname yayımlandı** — palet + tipografi + bileşen dili + ana ekran/saha maketleri.
+- [x] ~~Bekleyen migration~~ / ~~build #9'da olmayan iki özellik~~ / ~~1.0.6 testi~~ — üçü de kapandı (yukarıda).
 
 ## Tamamlananlar (2026-07-31 / 08-01)
 - [x] **Eksik kadroyu yedeklerden otomatik tamamlama** (`fillFieldPool`) — "Kesin Var" kapasiteden azken saha eksik kuruluyordu ve yedekler hiç kullanılmıyordu. Artık mevki ihtiyacına göre dolduruluyor; denge `buildTeamVariants` aşamasında zaten kuruluyor. Gerçek veriyle test edildi (9/11/14 kişilik senaryolar).
