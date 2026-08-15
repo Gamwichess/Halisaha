@@ -7,7 +7,7 @@
 - **Proje**: Halı saha (amatör futbol) takım yönetim uygulaması
 - **Stack**: Expo (React Native) + Supabase
 - **Mimari**: Tek dosyada SPA-tarzı state navigasyonu — `app/(tabs)/index.tsx` (~5600 satır)
-- **Dağıtım**: iOS TestFlight'ta yayında. Son build **1.0.5 / build #9** (build ID `b9d581fe`), commit `118721e`'den alındı. ⚠️ **Bu build'den SONRA iki özellik daha eklendi ve build'e GİRMEDİ**: eksik kadroyu yedeklerden otomatik tamamlama + oyuncu çıkarma/joker silme. Yeni `/guncelle` gerekiyor. `eas.json`'da `ascAppId: 169829` ekli → `eas build -p ios --profile production --auto-submit --non-interactive` tek komutla build+submit yapıyor. `/guncelle` artık sürümü sormadan patch +1 yapıp commit/push ediyor.
+- **Dağıtım**: iOS TestFlight'ta yayında. Son build **1.0.6 / build #10** (build ID `58089836`), commit `68cd0c0`'dan 2026-08-01'de alındı, durum `FINISHED`. Bu build **eksik kadroyu yedeklerden otomatik tamamlama + oyuncu çıkarma/joker silme** özelliklerini İÇERİYOR. ⏳ Henüz test edilmedi. `eas.json`'da `ascAppId: 169829` ekli → `eas build -p ios --profile production --auto-submit --non-interactive` tek komutla build+submit yapıyor. `/guncelle` artık sürümü sormadan patch +1 yapıp commit/push ediyor.
 - **KRİTİK / yayın öncesi**: RLS (Row Level Security) hâlâ KAPALI — public yayından önceki en büyük iş. Tablolar: profiles, teams, team_members, polls, poll_votes, guest_players, notifications, team_invites, match_lineups, player_ratings.
 
 ## Oturmuş Sistemler (çalışıyor)
@@ -41,7 +41,7 @@
 10. **`/checkpoint` komutu + ilk checkpoint** — `checkpoint-2026-08-01-01` tag'i atıldı ve push edildi.
 11. **TestFlight build 1.0.5 / #9** — sürüm 1.0.4→1.0.5, build alındı ve submit edildi. Non-interactive submit sorunsuz, bu sefer Apple 401 uyarısı da çıkmadı.
 12. **Eksik kadroyu yedeklerden otomatik tamamlama** (`fillFieldPool`) — aşağıda mimari not.
-13. **Oyuncu çıkarma / joker silme** — üye `⋯` menüsü yardımcıya açıldı (yetki devri kaptanda kaldı), jokerler için silme sıfırdan yazıldı. Migration `20260801160000_guest_soft_delete.sql` — **HENÜZ UYGULANMADI.**
+13. **Oyuncu çıkarma / joker silme** — üye `⋯` menüsü yardımcıya açıldı (yetki devri kaptanda kaldı), jokerler için silme sıfırdan yazıldı. Migration `20260801160000_guest_soft_delete.sql` — **UYGULANDI** (2026-08-16'da REST ile doğrulandı: `guest_players.is_active` kolonu DB'de var).
 
 ## Geçmiş Oturumlar (özet)
 - **2026-07-30/31**: TestFlight rebuild 1.0.2→1.0.3, build #8 alındı ve `--auto-submit --non-interactive` ile ASC'ye submit edildi (`ascAppId: 169829` sayesinde sorunsuz).
@@ -125,9 +125,9 @@
 - `switchTeam` / `handleCreateTeam` / `handleAcceptInvite` seçilen takımı `@mainTeamId`'ye yazar. Ayrılınan takım ana takımsa anahtar silinir, `fetchMyTeam` tekrar çağrılır.
 
 ## Devam Eden / Yarım Kalan İş
-- **⏳ İLK İŞ — bekleyen migration uygulanacak**: `npx supabase db push` → `20260801160000_guest_soft_delete.sql` (`guest_players.is_active`). Uygulanmadan geçmişi olan joker silinemez. (Kod migration'sız da çalışır, liste patlamaz — ama silme yarım kalır.)
-- **⏳ Yeni TestFlight build gerekiyor**: build #9 commit `118721e`'den alındı; ondan sonraki iki özellik (yedeklerden otomatik kadro tamamlama, oyuncu çıkarma/joker silme) test cihazlarında YOK. Migration uygulanıp test edilince `/guncelle`.
-- **⏳ 1.0.5 / #9 TestFlight'ta test edilecek.** Bu build birçok özelliği İLK KEZ test cihazlarına taşıdı. Kullanıcı + test arkadaşlarından feedback beklenecek. Test EDİLMEYEN listesi:
+- **📋 YOL HARİTASI**: 2026-08-16'da Altıpas (rakip, v2.0.0) analizinden kapsamlı bir faz planı çıkarıldı → **`YOL_HARITASI.md`**. Tasarım yenileme (sıfırdan yeni kimlik), i18n, Tier 0/1/2/3 sırası orada. Şu an **Faz 0** (mevcut borcu kapatma) yürüyor.
+- **✅ FAZ 0 TAMAMLANDI** (2026-08-16): migration uygulanmış (REST doğrulaması), 1.0.6/#10 build'i alınmış (`FINISHED`), ve **iki özellik test edildi — çalışıyor** (kullanıcı doğruladı): eksik kadroyu yedeklerden otomatik tamamlama + oyuncu çıkarma/joker silme. Migration ve build maddeleri DURUM.md'de bayat kalmıştı, düzeltildi.
+- **▶️ SIRADAKİ: Faz 1.0 — kimlik turu.** Sıfırdan yeni görsel kimlik (yön/ton → palet → tipografi → bileşen dili), 2-3 yön ana ekran + saha ekranı üstünde denenip seçilecek. Koda dokunmayan faz.
   - (a) Nitelik formu scroll'u — Kondisyon klavye altında kalıyor mu, boşluğa tıklayınca zıplıyor mu
   - (b) V1/V2/V3 varyasyon geçişi — sahada anlık değişiyor mu, formasyonu bozmuyor mu
   - (c) Otomatik formasyon önerisi — gerçek yoklamada makul mü (maç kurarken artık formasyon SORULMUYOR)

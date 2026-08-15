@@ -3,11 +3,12 @@
 > `/baslat` ile okunur, `/bitir` ile güncellenir. "Sonraya / Erken" bölümü = unutturma notları.
 
 ## Aktif (şu an üstünde çalışılan)
-- [ ] **⏳ Bekleyen migration**: `! npx supabase db push` → `20260801160000_guest_soft_delete.sql` (`guest_players.is_active`). Uygulanmadan geçmişi olan joker silinemez. Kod migration'sız da çalışır (filtre istemcide), liste patlamaz.
-- [ ] **⏳ Build #9'da OLMAYAN iki özellik** — test edilip yeni build alınacak (`/guncelle`):
-  - **Eksik kadroyu yedeklerden otomatik tamamlama**: "Kesin Var" kapasiteden azken saha yedeklerle doluyor mu, mevki dağılımı mantıklı mı, "Kadro Yedeklerle Tamamlandı" uyarısı çıkıyor mu
-  - **Oyuncu çıkarma**: yardımcı hesapla `⋯` menüsü açılıyor mu ve yetki devri seçenekleri GİZLİ mi; joker silme iki modu da (geçmişli/geçmişsiz) doğru mesajı veriyor mu
-- [ ] **⏳ 1.0.5 / build #9 TestFlight'ta test edilecek** — submit başarılı, Apple "Processing". Bu build aşağıdakileri İLK KEZ test cihazlarına taşıdı; kendin + test arkadaşlarından feedback al:
+
+> 📋 **Sıra `YOL_HARITASI.md`'de.** Şu an **Faz 0** — mevcut borcu kapatma.
+
+- [x] ~~Bekleyen migration~~ — **UYGULANMIŞ** (2026-08-16 REST doğrulaması: `guest_players.is_active` var).
+- [x] ~~Build #9'da olmayan iki özellik~~ — **1.0.6 / build #10 alınmış** (commit `68cd0c0`, 2026-08-01, FINISHED). Özellikler test cihazlarında var.
+- [x] ~~1.0.6 / build #10 testi~~ — **TEST EDİLDİ, ÇALIŞIYOR** (kullanıcı doğruladı 2026-08-16): eksik kadroyu yedeklerden otomatik tamamlama + oyuncu çıkarma/joker silme. → **FAZ 0 TAMAMLANDI.**
   - Nitelik formu: Kondisyon klavyenin altında kalıyor mu, boşluğa tıklayınca zıplıyor mu
   - Profil + profil tamamlama: 6 mevki geliyor mu (Ön Libero / Forvet Arkası)
   - Misafir ekleme: mevki sormuyor, sonra nitelik formundan giriliyor
@@ -15,7 +16,7 @@
   - **Otomatik formasyon**: maç kurarken artık formasyon SORULMUYOR — sistem seçiyor, makul mü
   - **Paylaşım görselinde logo**: `captureRef` uzak görsel yüklenmeden yakalarsa logo boş çıkabilir — tek şüpheli nokta
   - Takım kimliği: sen test ettin ✅, başka bir kaptan kendi takımında denesin
-- [ ] Feedback gelince: düzeltmeler → `/checkpoint` → `/guncelle` (komut sürümü kendisi 1.0.6 yapar).
+- [ ] Feedback gelince: düzeltmeler → `/checkpoint` → `/guncelle` (sürümü kendisi 1.0.7 yapar). Sonra **Faz 1'e geçilir** (kimlik turu + tasarım/i18n altyapısı).
 
 ## Bilinen Buglar (takip et — durumları belirsiz, test edilecek)
 - [ ] **⏳ Otomatik maç-sonu oylama doğrulaması**: Otomatik bitiş düzeltmesi kodlandı ama geçmişe-dönük kurulan maçta tetiklenmiyor gibi. **İleri saatte gerçek bir maç** kurup, saati geçince oylamanın otomatik geldiğini doğrula. Test aşamasındaki arkadaşlardan feedback al. (Kod: `fetchActivePoll` zaman aşımı dalı + `onRefresh` home.)
@@ -23,8 +24,8 @@
 - [ ] **`match_lineups`'a hiç `bench` satırı yazılmamış** — bu oturumda veri incelenirken fark edildi: 24 açıklanmış kadronun HEPSİ sadece `lineup='field'`, tek bir bench satırı yok. DURUM.md eskiden "field/bench yazılır" diyordu ama veri öyle demiyor. Yukarıdaki yedek yerleştirme maddesiyle ilgili olabilir — `saveLineupToSupabase`'e bakılacak.
 
 ## Sıradaki İşler (acelesi yok ama sırada)
-- [ ] **Oyuncu detay menüsü UI**: Oyuncuya tıklayınca açılan menü referans görseldeki gibi görünmeli — mevcut UI kötü. (⚠️ Referans görsel işe başlarken kullanıcıdan alınacak — görsel olmadan başlanamaz.)
-- [ ] **Maç hatırlatıcı bildirimi**: Maç saati yaklaşınca push/local bildirim. Kaç saat önce ve açık/kapalı kullanıcı ayarı olmalı. (expo-notifications local schedule; ayar `@pollSettings` benzeri saklanır.)
+- [ ] **Oyuncu detay menüsü UI**: Oyuncuya tıklayınca açılan menü referans görseldeki gibi görünmeli — mevcut UI kötü. ✅ **Referans görseller artık var**: `SS/referans/` (Altıpas v2.0.0, 24 ekran). → **Faz 2.7'de** yapılacak.
+- [ ] **Maç hatırlatıcı bildirimi**: Maç saati yaklaşınca push/local bildirim. Kaç saat önce ve açık/kapalı kullanıcı ayarı olmalı. (expo-notifications local schedule; ayar `@pollSettings` benzeri saklanır.) → **Faz 3.1'de** yapılacak.
 
 ## Sonraya / Erken (UNUTTURMA — şimdi yapma, ama hatırlat)
 - [ ] **RLS'i aç** — public TestFlight/yayın ÖNCESİ zorunlu. Şu an kapalı. En kritik yayın-öncesi iş. (Erken: önce özellikler otursun. NOT: bu oturumda gerçek veriyi anon key ile okuyabildik — kapalı olduğunun canlı kanıtı.)
