@@ -1,0 +1,251 @@
+<title>Gizlilik Politikası — Halı Saha</title>
+
+<style>
+  :root {
+    --bg: #FBFCFA;
+    --surface: #FFFFFF;
+    --line: #E2E7DF;
+    --text: #14201A;
+    --muted: #566159;
+    --accent: #2F6B1E;
+    --note-bg: #F4F8EF;
+    --warn-bg: #FFF6E8;
+    --warn-line: #E8C489;
+    --warn-text: #7A5312;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #0A0F0D;
+      --surface: #121A17;
+      --line: #22302A;
+      --text: #ECF1EE;
+      --muted: #9AAAA2;
+      --accent: #A8DC2C;
+      --note-bg: #141F19;
+      --warn-bg: #241C0D;
+      --warn-line: #5A4415;
+      --warn-text: #FFC259;
+    }
+  }
+  :root[data-theme="dark"] {
+    --bg: #0A0F0D; --surface: #121A17; --line: #22302A; --text: #ECF1EE;
+    --muted: #9AAAA2; --accent: #A8DC2C; --note-bg: #141F19;
+    --warn-bg: #241C0D; --warn-line: #5A4415; --warn-text: #FFC259;
+  }
+  :root[data-theme="light"] {
+    --bg: #FBFCFA; --surface: #FFFFFF; --line: #E2E7DF; --text: #14201A;
+    --muted: #566159; --accent: #2F6B1E; --note-bg: #F4F8EF;
+    --warn-bg: #FFF6E8; --warn-line: #E8C489; --warn-text: #7A5312;
+  }
+
+  body {
+    margin: 0; background: var(--bg); color: var(--text);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, system-ui, sans-serif;
+    font-size: 16.5px; line-height: 1.65;
+    -webkit-font-smoothing: antialiased;
+  }
+  .doc { max-width: 46rem; margin: 0 auto; padding: 56px 24px 96px; }
+
+  header { border-bottom: 2px solid var(--text); padding-bottom: 22px; margin-bottom: 12px; }
+  header h1 { margin: 0 0 10px; font-size: clamp(30px, 5vw, 40px); line-height: 1.12; letter-spacing: -.02em; }
+  .sub { margin: 0; color: var(--muted); font-size: 15px; }
+
+  h2 {
+    margin: 44px 0 12px; font-size: 20px; letter-spacing: -.01em;
+    padding-top: 18px; border-top: 1px solid var(--line);
+  }
+  h2:first-of-type { border-top: 0; }
+  h3 { margin: 26px 0 8px; font-size: 16px; }
+  p { margin: 0 0 14px; }
+  ul { margin: 0 0 14px; padding-left: 22px; }
+  li { margin-bottom: 7px; }
+  strong { font-weight: 700; }
+  a { color: var(--accent); }
+  a:focus-visible, summary:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
+
+  .placeholder {
+    background: var(--warn-bg); border: 1px dashed var(--warn-line);
+    color: var(--warn-text); padding: 1px 7px; border-radius: 5px;
+    font-weight: 700; font-size: .92em;
+  }
+
+  .note {
+    background: var(--note-bg); border: 1px solid var(--line);
+    border-radius: 12px; padding: 16px 18px; margin: 18px 0;
+  }
+  .note p:last-child { margin-bottom: 0; }
+
+  .tablewrap { overflow-x: auto; margin: 16px 0 20px; }
+  table { border-collapse: collapse; width: 100%; min-width: 34rem; font-size: 15px; }
+  th, td { text-align: left; padding: 11px 13px; border-bottom: 1px solid var(--line); vertical-align: top; }
+  th { background: var(--surface); font-size: 12.5px; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); }
+  td:first-child { font-weight: 600; white-space: nowrap; }
+
+  footer {
+    margin-top: 52px; padding-top: 22px; border-top: 1px solid var(--line);
+    color: var(--muted); font-size: 14.5px;
+  }
+</style>
+
+<div class="doc">
+
+<header>
+  <h1>Gizlilik Politikası</h1>
+  <p class="sub">Halı Saha uygulaması · Son güncelleme: 16 Ağustos 2026</p>
+</header>
+
+<p>
+  Bu politika, Halı Saha mobil uygulamasında hangi verilerin toplandığını, neden
+  toplandığını ve nasıl saklandığını açıklar. Sade tutmaya çalıştık: uygulamanın
+  gerçekten yaptığı şeyi yazdık, yapmadığı şeyleri de ayrıca belirttik.
+</p>
+
+<h2>1. Sorumlu</h2>
+<p>
+  Uygulamayı geliştiren ve verilerden sorumlu olan taraf:
+  <span class="placeholder">[ad soyad / firma unvanı]</span>.
+  Sorularınız için: <span class="placeholder">[iletişim e-posta adresi]</span>.
+</p>
+
+<h2>2. Topladığımız veriler</h2>
+
+<div class="tablewrap">
+<table>
+  <thead>
+    <tr><th>Veri</th><th>Ne zaman</th><th>Niçin</th></tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>E-posta ve şifre</td>
+      <td>Kayıt olurken</td>
+      <td>Hesabınızı oluşturmak ve girişinizi doğrulamak. Şifreler bize açık halde ulaşmaz; kimlik doğrulama sağlayıcımız tarafından şifrelenmiş biçimde saklanır.</td>
+    </tr>
+    <tr>
+      <td>Görünen ad, mevki, kullandığı ayak, profil fotoğrafı</td>
+      <td>Profilinizi doldururken</td>
+      <td>Takım arkadaşlarınızın sizi listelerde ve sahada tanıması.</td>
+    </tr>
+    <tr>
+      <td>Bildirim kimliği (push token)</td>
+      <td>Bildirime izin verirseniz</td>
+      <td>Maç daveti, kadro güncellemesi gibi bildirimleri cihazınıza ulaştırmak. İzin vermezseniz saklanmaz.</td>
+    </tr>
+    <tr>
+      <td>Takım bilgileri: takım adı, logo, renk, üyelikler ve roller</td>
+      <td>Takım kurarken veya katılırken</td>
+      <td>Takımı yönetmek, kaptan/yardımcı yetkilerini uygulamak.</td>
+    </tr>
+    <tr>
+      <td>Maç bilgileri: tarih, saat, saha adı ve <strong>haritadan seçilen saha koordinatı</strong></td>
+      <td>Kaptan maç oluştururken</td>
+      <td>Maçın nerede ve ne zaman olduğunu takıma göstermek.</td>
+    </tr>
+    <tr>
+      <td>Yoklama oyları (geliyorum / yedek / gelmiyorum)</td>
+      <td>Yoklamada oy verirken</td>
+      <td>Kaç kişi geleceğini hesaplamak ve kadroyu kurmak.</td>
+    </tr>
+    <tr>
+      <td>Nitelik puanları ve genel puan (OVR)</td>
+      <td>Kaptan girdiğinde veya maç sonu oylamada</td>
+      <td>Takımları dengeli dağıtmak. Maç sonu oylamada kimin kime kaç verdiği diğer oyunculara gösterilmez.</td>
+    </tr>
+    <tr>
+      <td>Kadro geçmişi (hangi maçta kim, hangi takımda ve mevkide oynadı)</td>
+      <td>Kadro açıklandığında</td>
+      <td>Maç geçmişi ve her hafta aynı kişilerin aynı takıma düşmesini engelleyen dağıtım algoritması.</td>
+    </tr>
+    <tr>
+      <td>Misafir (joker) oyuncu adı ve mevkisi</td>
+      <td>Kaptan elle eklediğinde</td>
+      <td>Uygulamada hesabı olmayan oyuncuları kadroya dahil edebilmek. Aşağıda ayrıca ele alınmıştır.</td>
+    </tr>
+  </tbody>
+</table>
+</div>
+
+<h2>3. Toplamadığımız veriler</h2>
+<p>Bunları açıkça belirtiyoruz, çünkü benzer uygulamalarda sık karşılaşılıyor:</p>
+<ul>
+  <li><strong>Cihazınızın konumunu okumuyoruz.</strong> Uygulamada harita var, ama yalnızca kaptanın sahayı elle işaretlemesi için. Konum izni istenmez; nerede olduğunuz hiçbir zaman okunmaz veya kaydedilmez.</li>
+  <li><strong>Rehberinize, kameranıza veya mikrofonunuza erişmiyoruz.</strong> Yalnızca siz bir fotoğraf seçtiğinizde galeri erişimi istenir.</li>
+  <li><strong>Reklam ağı, analitik veya izleme aracı kullanmıyoruz.</strong> Uygulamada üçüncü taraf reklam veya davranış izleme kodu yoktur.</li>
+  <li><strong>Verilerinizi satmıyoruz</strong> ve pazarlama amacıyla üçüncü taraflarla paylaşmıyoruz.</li>
+</ul>
+
+<h2>4. Verileriniz nerede saklanıyor</h2>
+<p>
+  Uygulama kendi sunucusunu işletmez. Veriler aşağıdaki hizmet sağlayıcılarda tutulur:
+</p>
+<ul>
+  <li><strong>Supabase</strong> — hesap bilgileri, takım/maç/kadro verileri ve yüklenen görseller (takım logosu, profil fotoğrafı) burada saklanır.</li>
+  <li><strong>Expo</strong> — bildirim gönderimi Expo'nun bildirim servisi üzerinden, oradan da Apple ve Google'ın bildirim altyapısına iletilir.</li>
+  <li><strong>Apple App Store / Google Play</strong> — uygulamanın dağıtımı ve güncellemeleri.</li>
+</ul>
+<p>
+  Bu sağlayıcıların sunucuları Türkiye dışında bulunabilir; hizmeti kullanmanız
+  verilerinizin yurt dışında işlenmesini kapsar.
+</p>
+
+<h2>5. Misafir (joker) oyuncular hakkında</h2>
+<div class="note">
+  <p>
+    Kaptanlar, uygulamada hesabı olmayan kişileri kadroya dahil etmek için isim
+    girerek "misafir oyuncu" ekleyebilir. Bu, hakkında veri işlenen kişinin
+    uygulamayı hiç kullanmadığı anlamına gelir.
+  </p>
+  <p>
+    Kaptanlara sorumluluk düşer: yalnızca gerçekten o maça katılan kişileri ekleyin,
+    tam ad yerine takma ad veya ad + baş harf kullanmayı tercih edin, ve kişi
+    isterse kaydını silin. Misafir kaydının silinmesini isteyen kişiler bizimle
+    doğrudan da iletişime geçebilir.
+  </p>
+</div>
+
+<h2>6. Verilerin saklanma süresi</h2>
+<ul>
+  <li>Hesabınız açık kaldığı sürece verileriniz saklanır.</li>
+  <li>Takımdan ayrılırsanız üyelik kaydınız silinir; ancak <strong>geçmiş maçların kadro kayıtları korunur</strong>, çünkü bunlar takımın maç geçmişini ve dağıtım algoritmasının verisini oluşturur.</li>
+  <li>Hesabınızı silerseniz profil bilgileriniz ve giriş bilgileriniz kaldırılır.</li>
+</ul>
+
+<h2>7. Haklarınız</h2>
+<p>
+  KVKK ve GDPR kapsamında; verilerinize erişme, düzeltilmesini isteme, silinmesini
+  isteme ve işlemeye itiraz etme haklarına sahipsiniz. Profil bilgilerinizi
+  uygulama içinden dilediğiniz zaman düzenleyebilirsiniz. Hesabınızın veya
+  verilerinizin silinmesi için yukarıdaki e-posta adresinden bize yazabilirsiniz;
+  talebinize en geç 30 gün içinde dönüş yapılır.
+</p>
+
+<h2>8. Çocuklar</h2>
+<p>
+  Uygulama 13 yaşın altındaki çocuklara yönelik değildir ve bu yaş grubundan
+  bilerek veri toplamayız. Böyle bir kaydın oluştuğunu fark edersek sileriz.
+</p>
+
+<h2>9. Güvenlik</h2>
+<p>
+  Veriler, hizmet sağlayıcılarımızın sunucularında şifreli bağlantı üzerinden
+  iletilir ve saklanır. Bununla birlikte hiçbir sistem tam güvenli değildir;
+  hesabınızı korumak için güçlü ve size özel bir şifre kullanmanızı öneririz.
+</p>
+
+<h2>10. Bu politikadaki değişiklikler</h2>
+<p>
+  Uygulamaya yeni özellikler eklendikçe bu metin güncellenebilir. Önemli bir
+  değişiklik olduğunda uygulama içinde bilgilendirme yapılır. Sayfanın başındaki
+  "son güncelleme" tarihi her zaman geçerli sürümü gösterir.
+</p>
+
+<h2>11. İletişim</h2>
+<p>
+  Gizlilikle ilgili her türlü soru, talep veya şikâyet için:
+  <span class="placeholder">[iletişim e-posta adresi]</span>
+</p>
+
+<footer>
+  Halı Saha · Gizlilik Politikası · 16 Ağustos 2026
+</footer>
+
+</div>
