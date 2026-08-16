@@ -1519,7 +1519,13 @@ export default function Index() {
   // ─── Supabase / Profil Yükleme Fonksiyonları ───
   async function fetchProfile(userId: string) {
     try {
-      const { data } = await supabase.from('profiles').select('*').eq('id', userId).single();
+      // RLS: profiles'ta push_token ve pending_invite_code kolon bazında OKUMAYA
+      // kapalı (bkz. 20260816130000_enable_rls.sql). select('*') artık hata verir.
+      const { data } = await supabase
+        .from('profiles')
+        .select('id, display_name, main_position, avatar_url, preferred_foot')
+        .eq('id', userId)
+        .single();
       if (data) {
         if (data.display_name)    setNickname(data.display_name);
         if (data.main_position)   setPosition(data.main_position);
@@ -1531,16 +1537,17 @@ export default function Index() {
           setScreen('profile_setup');
         }
 
-        if (data.pending_invite_code) {
-          const { data: invite } = await supabase
-            .from('team_invites')
-            .select('team_id, expires_at, teams(name)')
-            .eq('code', data.pending_invite_code)
-            .single();
-          if (invite && (!invite.expires_at || new Date(invite.expires_at) > new Date())) {
+        // Kendi bekleyen davet kodum — kolon okunamadığı için RPC ile.
+        const { data: pendingCode } = await supabase.rpc('my_pending_invite');
+        if (pendingCode) {
+          // Kodla takım arama: henüz üye olmadığım için team_invites'ı doğrudan
+          // okuyamam, RPC'den geçer.
+          const { data: inviteRows } = await supabase.rpc('lookup_team_invite', { p_code: pendingCode });
+          const invite = Array.isArray(inviteRows) ? inviteRows[0] : inviteRows;
+          if (invite && invite.is_valid) {
             setPendingInviteInfo({
-              code: data.pending_invite_code,
-              teamName: (invite.teams as any)?.name || 'Takım',
+              code: pendingCode,
+              teamName: invite.team_name || 'Takım',
               teamId: invite.team_id,
             });
           } else {
@@ -1830,22 +1837,22 @@ export default function Index() {
     if (claimErr || !claimed || claimed.length === 0) return; // başka client aldı ya da uygun değil
 
     try {
-      const { data: votes } = await supabase
-        .from('player_ratings')
-        .select('rated_user_id, rated_guest_id, attribute, score')
-        .eq('poll_id', pollId);
+      // RLS: player_ratings artık YALNIZCA kendi verdiğin oyları döndürüyor
+      // (kimin kime kaç verdiği gizli — gizlilik politikasında da taahhüt edildi).
+      // Ortalamalar voter_id'yi hiç açmayan RPC'den gelir. OVR mantığı burada
+      // kalır, SQL'e kopyalanmaz — iki yerde ayrışma riski olmasın.
+      const { data: votes } = await supabase.rpc('get_match_rating_averages', { p_poll: pollId });
       if (!votes || votes.length === 0) return;
 
-      // Grupla: playerKey -> { userId, guestId, attr -> [scores] }
-      type Agg = { userId: string | null; guestId: string | null; attrs: Record<string, number[]> };
+      // Grupla: playerKey -> { userId, guestId, attr -> ortalama }
+      type Agg = { userId: string | null; guestId: string | null; attrs: Record<string, number> };
       const map = new Map<string, Agg>();
       for (const v of votes as any[]) {
         const key = v.rated_user_id || v.rated_guest_id;
         if (!key) continue;
         let a = map.get(key);
         if (!a) { a = { userId: v.rated_user_id, guestId: v.rated_guest_id, attrs: {} }; map.set(key, a); }
-        if (!a.attrs[v.attribute]) a.attrs[v.attribute] = [];
-        a.attrs[v.attribute].push(Number(v.score));
+        a.attrs[v.attribute] = Number(v.avg_score);
       }
 
       for (const agg of map.values()) {
@@ -1860,8 +1867,7 @@ export default function Index() {
         const secondary = (cur?.secondary_position as SkillPosition) || null;
 
         const newAttrs: Record<string, number> = { ...oldAttrs };
-        for (const [attr, scores] of Object.entries(agg.attrs)) {
-          const avg    = scores.reduce((s, n) => s + n, 0) / scores.length;
+        for (const [attr, avg] of Object.entries(agg.attrs)) {
           const scaled = ratingToAttrScale(avg);
           const raw    = Number(oldAttrs[attr]);
           const old    = Number.isFinite(raw) ? raw : 60;
@@ -1918,7 +1924,10 @@ export default function Index() {
 
         if (roster && roster.length > 0) {
           const userIds = roster.map((r: any) => r.user_id);
-          const { data: profs } = await supabase.from('profiles').select('*').in('id', userIds);
+          const { data: profs } = await supabase
+            .from('profiles')
+            .select('id, display_name, main_position, avatar_url, preferred_foot')
+            .in('id', userIds);
           const merged = (profs || []).map(prof => {
             const entry = roster.find((r: any) => r.user_id === prof.id);
             return { ...prof, ...entry };
@@ -2015,18 +2024,18 @@ export default function Index() {
     const trimmed = code.trim().toUpperCase();
     if (!trimmed) { Alert.alert('Hata', 'Lütfen bir davet kodu girin.'); return; }
     try {
-      const { data: invite, error } = await supabase
-        .from('team_invites')
-        .select('team_id, expires_at, teams(name)')
-        .eq('code', trimmed)
-        .single();
+      // RLS: henüz üye olmadığım için team_invites'ı doğrudan okuyamam. RPC'den
+      // geçer — policy'yi gevşetmek kod deneyerek tüm davetlerin çekilmesine
+      // izin verirdi.
+      const { data: inviteRows, error } = await supabase.rpc('lookup_team_invite', { p_code: trimmed });
+      const invite = Array.isArray(inviteRows) ? inviteRows[0] : inviteRows;
       if (error || !invite) { Alert.alert('Geçersiz Kod', 'Bu davet kodu bulunamadı.'); return; }
-      if (invite.expires_at && new Date(invite.expires_at) < new Date()) {
+      if (!invite.is_valid) {
         Alert.alert('Süresi Dolmuş', 'Bu davet kodunun süresi dolmuş.'); return;
       }
       setPendingInviteInfo({
         code: trimmed,
-        teamName: (invite.teams as any)?.name || 'Takım',
+        teamName: invite.team_name || 'Takım',
         teamId: invite.team_id,
       });
     } catch (err: any) {
@@ -2037,11 +2046,9 @@ export default function Index() {
   async function handleAcceptInvite() {
     if (!pendingInviteInfo || !session?.user?.id) return;
     try {
-      const { error } = await supabase.from('team_members').insert({
-        team_id: pendingInviteInfo.teamId,
-        user_id: session.user.id,
-        role: 'player',
-      });
+      // RLS: doğrudan team_members insert'i KAPALI (olsaydı herkes her takıma
+      // katılabilirdi). RPC davet kodunu doğrulayıp üyeliği kendisi ekler.
+      const { error } = await supabase.rpc('accept_team_invite', { p_code: pendingInviteInfo.code });
       if (error) throw error;
       await supabase.from('profiles').update({ pending_invite_code: null }).eq('id', session.user.id);
       const teamName = pendingInviteInfo.teamName;
@@ -2306,21 +2313,15 @@ export default function Index() {
   async function handleCreateTeam(teamName: string) {
     if (!session?.user?.id || !teamName.trim()) return;
     const joinCode = Math.random().toString(36).substring(2, 8).toUpperCase();
-    const { data: yeniTakim, error } = await supabase
-      .from('teams')
-      .insert({
-        name: teamName.trim(),
-        captain_id: session.user.id,
-        created_by: session.user.id,
-        join_code: joinCode,
-      })
-      .select()
+    // RLS: takım + kaptan üyeliği TEK işlemde kurulur (create_team RPC).
+    // Eskiden iki ayrı insert vardı; ikincisi patlarsa kaptansız öksüz takım
+    // kalıyordu. Ayrıca "kendi üyeliğini ekleyebilirsin" policy'si herkesin her
+    // takıma katılabilmesi demek olurdu — o yüzden doğrudan insert kapalı.
+    const { data: rpcTeam, error } = await supabase
+      .rpc('create_team', { p_name: teamName.trim(), p_join_code: joinCode })
       .single();
-    if (error) { Alert.alert('Hata', error.message); return; }
-    const { error: memberError } = await supabase
-      .from('team_members')
-      .insert({ team_id: yeniTakim.id, user_id: session.user.id, role: 'captain' });
-    if (memberError) { Alert.alert('Hata', memberError.message); return; }
+    const yeniTakim = rpcTeam as { id: string } | null;
+    if (error || !yeniTakim) { Alert.alert('Hata', error?.message || 'Takım oluşturulamadı.'); return; }
     setNewTeamName('');
     setShowCreateTeamModal(false);
     // Yeni oluşturulan takımı ana takım yap → fetchMyTeam onu yüklesin (eski ana takım değil).
@@ -2352,7 +2353,10 @@ export default function Index() {
       .eq('team_id', teamId);
     if (roster && roster.length > 0) {
       const userIds = roster.map((r: any) => r.user_id);
-      const { data: profs } = await supabase.from('profiles').select('*').in('id', userIds);
+      const { data: profs } = await supabase
+            .from('profiles')
+            .select('id, display_name, main_position, avatar_url, preferred_foot')
+            .in('id', userIds);
       const merged = (profs || []).map((prof: any) => {
         const entry = roster.find((r: any) => r.user_id === prof.id);
         return { ...prof, ...entry };
@@ -2457,7 +2461,10 @@ export default function Index() {
       .eq('team_id', teamId);
     if (roster && roster.length > 0) {
       const userIds = roster.map((r: any) => r.user_id);
-      const { data: profs } = await supabase.from('profiles').select('*').in('id', userIds);
+      const { data: profs } = await supabase
+            .from('profiles')
+            .select('id, display_name, main_position, avatar_url, preferred_foot')
+            .in('id', userIds);
       const merged = (profs || []).map((prof: any) => {
         const entry = roster.find((r: any) => r.user_id === prof.id);
         return { ...prof, ...entry };
@@ -3498,14 +3505,15 @@ export default function Index() {
     if (!myTeamInfo?.id || !guest?.id) return;
     const name = guest.name || 'bu joker';
 
-    // Geçmiş var mı? (head:true → satır çekmeden sadece sayı)
+    // Geçmiş var mı? RLS: player_ratings yalnızca KENDİ oylarını gösterdiği için
+    // istemciden sayım yanlış çıkardı (başkasının oyladığı joker "geçmişsiz"
+    // görünüp SERT silinir, geçmiş kadrolar ve çeşitlilik verisi uçardı).
+    // Sayım sunucuda, yönetici kontrolüyle yapılır.
     let hasHistory = true;
     try {
-      const [lineups, ratings] = await Promise.all([
-        supabase.from('match_lineups').select('id', { count: 'exact', head: true }).eq('guest_id', guest.id),
-        supabase.from('player_ratings').select('id', { count: 'exact', head: true }).eq('rated_guest_id', guest.id),
-      ]);
-      hasHistory = (lineups.count ?? 0) > 0 || (ratings.count ?? 0) > 0;
+      const { data, error } = await supabase.rpc('guest_has_history', { p_guest: guest.id });
+      if (error) throw error;
+      hasHistory = data === true;
     } catch {
       // Sayamadıysak güvenli tarafta kal: geçmişi varmış gibi davran (yumuşak sil).
       hasHistory = true;
@@ -4548,16 +4556,13 @@ export default function Index() {
                     const trimmed = inviteCodeInput.trim().toUpperCase();
                     if (!trimmed) { Alert.alert('Hata', 'Lütfen bir davet kodu girin.'); return; }
                     try {
-                      const { data: invite, error } = await supabase
-                        .from('team_invites')
-                        .select('team_id, expires_at, teams(name)')
-                        .eq('code', trimmed)
-                        .single();
-                      if (error || !invite) { Alert.alert('Geçersiz Kod', 'Geçersiz veya süresi dolmuş kod.'); return; }
-                      if (invite.expires_at && new Date(invite.expires_at) < new Date()) {
+                      // RLS: davet arama ve katılma RPC'lerden geçer (bkz. handleJoinWithCode).
+                      const { data: inviteRows, error } = await supabase.rpc('lookup_team_invite', { p_code: trimmed });
+                      const invite = Array.isArray(inviteRows) ? inviteRows[0] : inviteRows;
+                      if (error || !invite || !invite.is_valid) {
                         Alert.alert('Geçersiz Kod', 'Geçersiz veya süresi dolmuş kod.'); return;
                       }
-                      const teamName = (invite.teams as any)?.name || 'Takım';
+                      const teamName = invite.team_name || 'Takım';
                       setShowJoinTeamModal(false);
                       Alert.alert(
                         `${teamName} takımına katıl`,
@@ -4566,11 +4571,10 @@ export default function Index() {
                           { text: 'İptal', style: 'cancel', onPress: () => setInviteCodeInput('') },
                           { text: 'Katıl ✓', onPress: async () => {
                             if (!session?.user?.id) return;
-                            const { error: joinErr } = await supabase.from('team_members').insert({
-                              team_id: invite.team_id, user_id: session.user.id, role: 'player',
-                            });
+                            const { error: joinErr } = await supabase.rpc('accept_team_invite', { p_code: trimmed });
                             if (joinErr) { Alert.alert('Hata', joinErr.message); return; }
                             setInviteCodeInput('');
+                            await AsyncStorage.setItem('@mainTeamId', invite.team_id);
                             await fetchMyTeam(session.user.id);
                             await fetchUserTeams(session.user.id);
                             Alert.alert('Hoş Geldin! 🎉', `${teamName} takımına katıldın!`);
