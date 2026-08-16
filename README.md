@@ -305,6 +305,11 @@ Kaptan → handleOpenPoll()
 | iOS Bundle ID | `com.gamwi.halisaha` |
 | Android Package | `com.htapp.halisaha` (iOS'tan FARKLI — `com.gamwi.halisaha` Play'de alınmıştı) |
 | Supabase Proje | `jvkanwkhlzwyahbspjks.supabase.co` |
+| Gizlilik Politikası | https://gamwichess.github.io/htapp-legal/ |
+| Destek e-postası | `destek.htapp@gmail.com` |
+
+**Gizlilik politikası nasıl güncellenir:** Kaynak bu repoda `legal/gizlilik-politikasi.html`. Yayın ayrı bir **public** repoda (`Gamwichess/htapp-legal`), yerel kopyası `C:\Users\STK\Desktop\htapp-legal\index.html`. Güncelleme: kaynağı düzenle → `index.html` olarak kopyala (⚠️ o dosyada `<!DOCTYPE>`, `charset=utf-8` ve viewport sarmalayıcısı var, kaynakta yok — sarmalayıcıyı koru) → push. URL sabit kalır.
+⚠️ Play, bu URL'i uygulamanın ömrü boyunca periyodik kontrol eder. Erişilemez olursa uygulama askıya alınabilir.
 
 ---
 
