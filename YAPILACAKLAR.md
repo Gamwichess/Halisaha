@@ -24,9 +24,10 @@ Anon tarafı doğrulandı (her tabloda HTTP 401). Giriş yapmış kullanıcı ta
 - [x] Oyuncu ve joker çıkarma *(`guest_has_history` RPC + `team_members` delete)*
 - [x] Maç sonu performans oyu gönderme *(`player_ratings` insert, D2 katı policy)*
 
-**⏳ Kalan iki yol:**
-- [ ] **`accept_team_invite` — başka bir hesapla koda katılma. ÖNCELİKLİ:** dahili teste alınacak her testçi bu yoldan geçecek. Kırıksa test tamamen tıkanır. İkinci bir hesapla mutlaka denenmeli.
-- [ ] **`get_match_rating_averages` — OVR işleme.** Oy *gönderme* çalışıyor, ama 24 saatlik pencere kapanınca çalışan hesaplama henüz tetiklenmedi. İleri saatli gerçek maç gerekiyor; bugün test edilemez.
+- [x] **`accept_team_invite`** — ikinci hesapla davet koduyla katılma ✅ (dahili testteki her testçinin geçeceği yol)
+
+**⏳ Kalan tek yol:**
+- [ ] **`get_match_rating_averages` — OVR işleme.** Oy *gönderme* çalışıyor, ama 24 saatlik pencere kapanınca çalışan hesaplama henüz tetiklenmedi. İleri saatli gerçek maç gerekiyor. Zaten önceden beri açık olan "otomatik maç-sonu oylama doğrulaması" maddesiyle aynı testte doğrulanabilir.
 - [ ] Bildirim tetikleyen bir işlem — ⚠️ `send-notification` edge function'ının **service role key** kullandığı VARSAYILDI, doğrulanmadı. Anon key kullanıyorsa bildirim yazma sessizce kırılır.
 
 Kırılırsa: Dashboard → SQL Editor → `supabase/rollback/rls_rollback.sql` yapıştır → Run. RLS kapanır, RPC'ler kalır, uygulama çalışır.
