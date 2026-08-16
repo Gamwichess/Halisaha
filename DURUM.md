@@ -8,7 +8,7 @@
 - **Stack**: Expo (React Native) + Supabase
 - **Mimari**: Tek dosyada SPA-tarzı state navigasyonu — `app/(tabs)/index.tsx` (~5600 satır)
 - **Dağıtım**: iOS TestFlight'ta yayında. Son build **1.0.6 / build #10** (build ID `58089836`), commit `68cd0c0`'dan 2026-08-01'de alındı, durum `FINISHED`. Bu build **eksik kadroyu yedeklerden otomatik tamamlama + oyuncu çıkarma/joker silme** özelliklerini İÇERİYOR. ⏳ Henüz test edilmedi. `eas.json`'da `ascAppId: 169829` ekli → `eas build -p ios --profile production --auto-submit --non-interactive` tek komutla build+submit yapıyor. `/guncelle` artık sürümü sormadan patch +1 yapıp commit/push ediyor.
-- **KRİTİK / yayın öncesi**: RLS (Row Level Security) hâlâ KAPALI — public yayından önceki en büyük iş. Tablolar: profiles, teams, team_members, polls, poll_votes, guest_players, notifications, team_invites, match_lineups, player_ratings.
+- **✅ RLS AÇILDI** (2026-08-16) — 12 tabloda + storage. Anon key artık her tabloda HTTP 401 alıyor (doğrulandı). ⏳ Giriş yapmış kullanıcı tarafı uygulamada test edilecek. Aşağıda "RLS Mimarisi" notu.
 
 ## Oturmuş Sistemler (çalışıyor)
 - Supabase şeması: 9+ tablo temiz kurulu (+ player_ratings maç-sonu oylama için)
@@ -43,6 +43,28 @@ Bu oturumda **koda neredeyse hiç dokunulmadı** — strateji, planlama ve tasar
 - **2026-07-31 / 08-01**: Takım çeşitliliği sistemi (asıl büyük iş) + V1/V2/V3 varyasyon seçimi + otomatik formasyon önerisi + "Dengeli/Rastgele Kur" tek butona indirildi. Takım kimliği (logo/isim/renk, migration uygulandı). Nitelik formu scroll düzeltmesi (`KeyboardAwareScrollView` kaldırıldı). Profil mevki listeleri 6'lı `SKILL_POSITIONS`'a geçti + `positionLabel()`. Misafir eklerken mevki sorulmuyor. `fillFieldPool` (eksik kadroyu yedeklerden tamamlama). Oyuncu çıkarma / joker silme (iki modlu). `/checkpoint` komutu + `/guncelle` sürüm bump düzeltmesi. TestFlight 1.0.5/#9. Tümünün mimari notları aşağıda.
 - **2026-07-30/31**: TestFlight rebuild 1.0.2→1.0.3, build #8 alındı ve `--auto-submit --non-interactive` ile ASC'ye submit edildi (`ascAppId: 169829` sayesinde sorunsuz).
 - **2026-07-24**: Maç otomatik bitince oylama gelmeme bug'ının kök nedeni bulundu+düzeltildi (⏳ hâlâ doğrulanacak); pull-to-refresh'e `fetchOpenRatingMatch`; nitelik girişi scroll zıplaması (bu oturumda tamamen elden geçti); paylaşımda maç bilgisi saha görseline şerit olarak basıldı; maç oluşturunca home'a dönüş; ana takım / "takımda değilsiniz" bug'ı (`@mainTeamId` mimarisi).
+
+## RLS Mimarisi (kalıcı notlar — YENİ, 2026-08-16)
+Migration'lar: `20260816120000_rls_helpers_and_rpcs.sql` (altyapı) + `20260816130000_enable_rls.sql` (policy'ler). İkisi de UYGULANDI.
+
+- **⚠️ SONSUZ DÖNGÜ TUZAĞI**: `team_members` üstündeki bir policy `team_members`'a sorgu atarsa Postgres sonsuz döngüye girer, tablo tamamen erişilemez olur. Bu yüzden tüm üyelik kontrolleri **`SECURITY DEFINER`** fonksiyonlarda: `is_team_member(team_id)`, `is_team_manager(team_id)`. Bunlar RLS'i baypas eder. **Yeni policy yazarken ASLA doğrudan `team_members` select'i koyma, bu fonksiyonları kullan.**
+- Tüm SECURITY DEFINER fonksiyonlarda `set search_path = public, pg_temp` var — yoksa ayrıcalık yükseltme açığı olur.
+- **`FORCE ROW LEVEL SECURITY` KULLANILMADI** — force tablo sahibine de RLS uygular ve postgres'e ait SECURITY DEFINER fonksiyonlarımızı kırardı.
+- **`anon` rolünden tüm tablo yetkileri alındı.** Anon key APK/IPA içinde gömülü ve çıkarılabilir. Doğrulandı: anon artık her tabloda HTTP 401.
+- **`profiles` kolon bazlı korumalı**: `push_token` ve `pending_invite_code` OKUNAMAZ (yazılabilir).
+  - `push_token` kritik: Expo push API kimlik doğrulaması istemiyor, token'ı bilen **herkes** o kişiye bildirim gönderebilir. Takım arkadaşına bile açılmaz.
+  - `pending_invite_code`: takım arkadaşının görmesi, onun henüz üye OLMADIĞI bir takımın kodunu öğrenmesi demekti.
+  - **Bu yüzden `profiles`'ta `select('*')` ARTIK PATLAR** — hep açık kolon listesi yaz.
+- **RPC'ye taşınan akışlar** (policy ile ifade edilemeyen veya güvenli ifade edilemeyenler):
+  - `create_team` — takım + kaptan üyeliği atomik. Doğrudan `teams` INSERT policy'si YOK.
+  - `lookup_team_invite` / `accept_team_invite` — koda göre takım bulurken henüz üye değilsin. Policy'yi gevşetmek kod deneyerek tüm takım/davet listesinin çekilmesine izin verirdi. `team_members`'a doğrudan self-insert de KAPALI (olsaydı herkes her takıma katılırdı).
+  - `get_match_rating_averages` — `voter_id`'yi HİÇ döndürmez, sadece ortalama. OVR mantığı istemcide kaldı, SQL'e kopyalanmadı (iki yerde ayrışmasın).
+  - `guest_has_history` — joker sert/yumuşak silme kararı. İstemciden sayım artık yanlış çıkardı.
+  - `my_pending_invite`, `can_manage_team_folder`.
+- **KARAR D1 — `poll_votes` takım içinde okunabilir.** Gizlilik ("oyuncu sadece toplamı görür") bir ARAYÜZ kararı, güvenlik sınırı değil. Katı yapılsaydı **Realtime bozulurdu**: `PlayerVoteScreen` `postgres_changes` dinliyor ve Realtime de RLS'e uyuyor — görülemeyen satırın olayı hiç gelmez, canlı sayaç donardı.
+- **KARAR D2 — `player_ratings` KATI**, sadece kendi verdiğin oylar. Kimin kime kaç verdiği hassas ve gizlilik politikasında taahhüt edildi.
+- **Geri alma**: `supabase/rollback/rls_rollback.sql`. ⚠️ Bilerek `migrations/` klasörünün DIŞINDA — içinde olsaydı `db push` onu da uygulayıp RLS'i anında geri kapatırdı. Dashboard → SQL Editor'dan elle çalıştırılır. RPC'ler yerinde kalır, uygulama çalışmaya devam eder.
+- **⚠️ YENİ TABLO/KOLON EKLERKEN**: yeni tablo RLS'siz açılır ve sessizce herkese açık olur. Her yeni tabloda `enable row level security` + policy şart. Yeni kolonda ise "geri düşüş" dersini de hatırla (aşağıda Takım Kimliği notu).
 
 ## Yol Haritası Mimarisi (kalıcı notlar — YENİ)
 Sıralamanın gerekçeleri; `YOL_HARITASI.md` fazların kendisini tutar, buradakiler NEDEN öyle sıralandığı.

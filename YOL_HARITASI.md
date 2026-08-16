@@ -120,12 +120,13 @@ Sıra kritik: **priming ancak izin isteyecek bir şey varsa anlamlı** → önce
 
 ---
 
-## FAZ 6 — RLS + yayın hazırlığı (public çıkıştan hemen önce, ağdan ÖNCE zorunlu)
+## FAZ 6 — RLS + yayın hazırlığı
 
-Neden burada: özellikler otururken policy yazmak her yeni tabloda borç üretir. Ama ağ katmanı = başkalarının verisi → RLS'siz asla.
+⚠️ **RLS bu fazdan ÇIKARILDI ve 2026-08-16'da yapıldı.** Sebep: Play Console dahili testine gerçek kullanıcı alınacaktı ve veritabanı tamamen açıktı (anon key ile profiller, push token'lar, yoklamalar okunabiliyordu). Plan yazılırken elimizde Play'e çıkma kararı yoktu.
 
-- [ ] Tüm tablolarda RLS policy'leri: profiles, teams, team_members, polls, poll_votes, guest_players, notifications, team_invites, match_lineups, player_ratings
-- [ ] `team_logos` storage policy daraltma — şu an "giriş yapmış herkes yazabilir"; olması gereken: o takımın kaptanı/yardımcısı yalnız `teamId/` klasörüne
+- [x] **12 tabloda RLS + storage policy'leri** — `20260816120000_rls_helpers_and_rpcs.sql` + `20260816130000_enable_rls.sql`, ikisi de uygulandı. Anon artık her tabloda HTTP 401. Mimari not DURUM.md "RLS Mimarisi".
+- [x] `team_logos` storage policy daraltma — sadece o takımın yöneticisi kendi `teamId/` klasörüne yazar.
+- [ ] ⏳ Giriş yapmış kullanıcı tarafının uygulamada doğrulanması (test listesi YAPILACAKLAR.md'de)
 - [ ] Hesabı Sil sunucu tarafının RLS altında gözden geçirilmesi
 - [ ] App Store: gizlilik beyanı (privacy nutrition labels), destek sayfası, metadata
 

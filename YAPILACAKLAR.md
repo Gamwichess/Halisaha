@@ -13,6 +13,22 @@
 - [ ] **Faz 1.5: `screens/` deseni** — ilk ekran çıkarılarak ispatlanır.
 - [ ] **Faz 2.1: Ayarlar ekranı** — ilk gerçek ekran. Aynı anda tasarımı, i18n'i ve Tier 0'ı (Hesabı Sil + Gizlilik/Koşullar/Destek) ispatlıyor.
 
+### ⏳ RLS testi (öncelikli — uygulandı, doğrulanmadı)
+Anon tarafı doğrulandı (401). Kalan risk **ters yönde**: giriş yapmış kullanıcının FAZLA engellenmesi. Sırayla dene:
+- [ ] Giriş yap → profil yükleniyor mu (`profiles` kolon yetkileri)
+- [ ] Takımım → takım listesi geliyor mu (**sonsuz döngü olsaydı burası boş kalırdı**)
+- [ ] Oyuncu listesi + OVR'lar görünüyor mu
+- [ ] Yeni takım oluştur (`create_team` RPC)
+- [ ] Davet kodu üret → **başka bir hesapla** katıl (`lookup_team_invite` + `accept_team_invite`)
+- [ ] Yoklama aç, oy ver → **canlı sayaç güncelleniyor mu** (Realtime + D1 kararı)
+- [ ] Kadro kur ve açıkla (`match_lineups` yazma)
+- [ ] Takım logosu değiştir (daraltılmış storage policy)
+- [ ] Bildirim tetikleyen bir işlem yap — ⚠️ `send-notification` edge function'ının **service role key** kullandığı VARSAYILDI; anon key kullanıyorsa bildirim yazma kırılır, kontrol et
+- [ ] Maç sonu oylama + OVR işleme (`get_match_rating_averages`) — ileri saatli gerçek maç gerekiyor
+- [ ] Joker silme, geçmişli/geçmişsiz iki mod (`guest_has_history`)
+
+Kırılırsa: Dashboard → SQL Editor → `supabase/rollback/rls_rollback.sql` yapıştır → Run. RLS kapanır, RPC'ler kalır, uygulama çalışır.
+
 ### Faz 1 boyunca dikkat
 - [ ] **Gündüz okunabilirliği testi (YÜKSEK RİSK)** — koyu kimliğin tek gerçek zayıflığı. Uygulama sahada, açık havada, bazen güneş altında açılıyor. İlk ekran bittiğinde **dışarıda** bakılmalı. Sorun çıkarsa zemini bir kademe açmak yeter; token'lar semantik olduğu için ekranlar yeniden yazılmaz.
 - [ ] **`team.B` (#10B981) / `success` (#22E07A) / koyu yeşil zemin çakışması** — A/B ayrımı saha ekranında okunaklı kalıyor mu, Faz 2.6'da doğrula. Takım renkleri sabit → çözüm rengi değil MUAMELEYİ değiştirmek (dolu rozet + koyu metin).
@@ -44,8 +60,7 @@
 - [ ] **Açık tema** — "Saha Gecesi" koyu bir kimlik; açık tema İSTENİRSE opsiyonel eklenti olarak sonradan gelir. Token'lar semantik yazıldığı için ekranlar yeniden yazılmaz. (Erken: önce koyu kimlik gerçek kullanımda otursun.)
 
 ### Diğer
-- [ ] **RLS'i aç** — public TestFlight/yayın ÖNCESİ zorunlu, **Faz 6**. Şu an kapalı. En kritik yayın-öncesi iş. (Erken: önce özellikler otursun. NOT: 2026-08-16 oturumunda da gerçek veriyi anon key ile REST üzerinden okuyabildik — kapalı olduğunun canlı kanıtı.)
-  - **Bu turda `team_logos` storage policy'lerini de daralt**: şu an "giriş yapmış herkes yazabilir". Olması gereken: sadece o takımın kaptanı/yardımcısı `teamId/` klasörüne yazabilsin. (`supabase/migrations/20260801120000_team_identity.sql` içine not düşüldü.)
+- [x] ~~**RLS'i aç**~~ — **YAPILDI 2026-08-16.** Faz 6'daydı, Play dahili testi için öne çekildi. 12 tablo + storage. Anon key artık her tabloda HTTP 401 (doğrulandı). `team_logos` policy'leri de daraltıldı (sadece o takımın yöneticisi kendi klasörüne yazar). Mimari not DURUM.md'de.
 - [ ] **Mevcut oyuncuların OVR'ını toplu yeniden-hesapla** — nitelik sistemi değişti; eski satırların stored `overall_rating`'i ancak yeniden kaydedilince güncelleniyor. (Açık soru — gerçek veri az olduğu için acil değil.)
 - [ ] **Eski profillerin `main_position`'ı** — artık SkillPosition KODU saklanıyor (`ON_LIBERO`). Eskiden `DEF`/`FOR` kaydedilmiş profillerde profil ekranında hiçbir chip seçili görünmez, kullanıcı bir kez yeniden seçmeli. İşlevsel etkisi yok (takım kurma `team_members.primary_position` kullanıyor). İstenirse tek seferlik eşleme scripti yazılabilir.
 - [ ] **Çeşitlilik/varyasyon sabitlerinin ince ayarı** — gerçek kullanım oturunca gözden geçir: `DIVERSITY_LAMBDA` (off 0 / mid 8 / high 20), `VARIANT_SPREAD = 15`, `VARIANT_COUNT = 3`, `VARIANT_RESTARTS = 150`, `PAIR_HISTORY_MATCHES = 3`, `PAIR_DECAY = 0.65`. Varyasyon sayısını 4'e çıkarmak için sadece `VARIANT_COUNT` yeter, UI kendini ona göre çiziyor.
