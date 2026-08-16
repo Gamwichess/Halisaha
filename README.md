@@ -302,7 +302,8 @@ Kaptan → handleOpenPoll()
 | Alan | Değer |
 |------|-------|
 | Project ID | `bfa8d530-4b08-450d-be80-97fe073cae94` |
-| Bundle ID | `com.gamwi.halisaha` |
+| iOS Bundle ID | `com.gamwi.halisaha` |
+| Android Package | `com.htapp.halisaha` (iOS'tan FARKLI — `com.gamwi.halisaha` Play'de alınmıştı) |
 | Supabase Proje | `jvkanwkhlzwyahbspjks.supabase.co` |
 
 ---

@@ -75,4 +75,4 @@ In `app/(tabs)/index.tsx`:
 - The `Talimat.md` file in the repo root is a Turkish-language task specification document used to track feature requests and the DB schema. It is not part of the app.
 - The `SS/` directory contains screenshots.
 - `supabase/` directory contains edge function or migration files for the project's Supabase backend.
-- The app is configured for EAS builds (project ID: `bfa8d530-4b08-450d-be80-97fe073cae94`, bundle ID: `com.gamwi.halisaha`).
+- The app is configured for EAS builds (project ID: `bfa8d530-4b08-450d-be80-97fe073cae94`). **iOS bundle ID and Android package differ**: iOS is `com.gamwi.halisaha`, Android is `com.htapp.halisaha` (the iOS identifier was already taken on Google Play). Neither can be changed after store submission.
