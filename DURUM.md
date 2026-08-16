@@ -8,7 +8,7 @@
 - **Stack**: Expo (React Native) + Supabase
 - **Mimari**: Tek dosyada SPA-tarzı state navigasyonu — `app/(tabs)/index.tsx` (~5600 satır)
 - **Dağıtım**: iOS TestFlight'ta yayında. Son build **1.0.6 / build #10** (build ID `58089836`), commit `68cd0c0`'dan 2026-08-01'de alındı, durum `FINISHED`. Bu build **eksik kadroyu yedeklerden otomatik tamamlama + oyuncu çıkarma/joker silme** özelliklerini İÇERİYOR. ⏳ Henüz test edilmedi. `eas.json`'da `ascAppId: 169829` ekli → `eas build -p ios --profile production --auto-submit --non-interactive` tek komutla build+submit yapıyor. `/guncelle` artık sürümü sormadan patch +1 yapıp commit/push ediyor.
-- **✅ RLS AÇILDI** (2026-08-16) — 12 tabloda + storage. Anon key artık her tabloda HTTP 401 alıyor (doğrulandı). ⏳ Giriş yapmış kullanıcı tarafı uygulamada test edilecek. Aşağıda "RLS Mimarisi" notu.
+- **✅ RLS AÇILDI ve TEST EDİLDİ** (2026-08-16) — 12 tabloda + storage. Anon her tabloda HTTP 401. Giriş yapmış kullanıcı tarafında 8 yol doğrulandı (okuma, yoklama+Realtime, kadro, davet kodu, takım oluşturma, logo, oyuncu/joker çıkarma, maç sonu oy gönderme). ⏳ İki yol kaldı: `accept_team_invite` (ikinci hesap gerekiyor) ve OVR işleme (24 saatlik pencere gerekiyor). Aşağıda "RLS Mimarisi" notu.
 
 ## Oturmuş Sistemler (çalışıyor)
 - Supabase şeması: 9+ tablo temiz kurulu (+ player_ratings maç-sonu oylama için)

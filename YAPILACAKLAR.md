@@ -13,19 +13,21 @@
 - [ ] **Faz 1.5: `screens/` deseni** — ilk ekran çıkarılarak ispatlanır.
 - [ ] **Faz 2.1: Ayarlar ekranı** — ilk gerçek ekran. Aynı anda tasarımı, i18n'i ve Tier 0'ı (Hesabı Sil + Gizlilik/Koşullar/Destek) ispatlıyor.
 
-### ⏳ RLS testi (öncelikli — uygulandı, doğrulanmadı)
-Anon tarafı doğrulandı (401). Kalan risk **ters yönde**: giriş yapmış kullanıcının FAZLA engellenmesi. Sırayla dene:
-- [ ] Giriş yap → profil yükleniyor mu (`profiles` kolon yetkileri)
-- [ ] Takımım → takım listesi geliyor mu (**sonsuz döngü olsaydı burası boş kalırdı**)
-- [ ] Oyuncu listesi + OVR'lar görünüyor mu
-- [ ] Yeni takım oluştur (`create_team` RPC)
-- [ ] Davet kodu üret → **başka bir hesapla** katıl (`lookup_team_invite` + `accept_team_invite`)
-- [ ] Yoklama aç, oy ver → **canlı sayaç güncelleniyor mu** (Realtime + D1 kararı)
-- [ ] Kadro kur ve açıkla (`match_lineups` yazma)
-- [ ] Takım logosu değiştir (daraltılmış storage policy)
-- [ ] Bildirim tetikleyen bir işlem yap — ⚠️ `send-notification` edge function'ının **service role key** kullandığı VARSAYILDI; anon key kullanıyorsa bildirim yazma kırılır, kontrol et
-- [ ] Maç sonu oylama + OVR işleme (`get_match_rating_averages`) — ileri saatli gerçek maç gerekiyor
-- [ ] Joker silme, geçmişli/geçmişsiz iki mod (`guest_has_history`)
+### RLS testi — 2026-08-16, büyük ölçüde GEÇTİ ✅
+Anon tarafı doğrulandı (her tabloda HTTP 401). Giriş yapmış kullanıcı tarafı kullanıcı tarafından test edildi:
+- [x] Takımım → oyuncular ve OVR'lar geliyor *(sonsuz döngü YOK, okuma yolları sağlam)*
+- [x] Yoklama aç, oy ver → **canlı sayaç güncelleniyor** *(Realtime + D1 kararı doğrulandı)*
+- [x] Kadro kur ve açıkla *(`match_lineups` yazma)*
+- [x] Davet kodu üret *(`team_invites` yazma)*
+- [x] Yeni takım oluştur *(`create_team` RPC)*
+- [x] Takım logosu değiştir ve kaldır *(daraltılmış storage policy)*
+- [x] Oyuncu ve joker çıkarma *(`guest_has_history` RPC + `team_members` delete)*
+- [x] Maç sonu performans oyu gönderme *(`player_ratings` insert, D2 katı policy)*
+
+**⏳ Kalan iki yol:**
+- [ ] **`accept_team_invite` — başka bir hesapla koda katılma. ÖNCELİKLİ:** dahili teste alınacak her testçi bu yoldan geçecek. Kırıksa test tamamen tıkanır. İkinci bir hesapla mutlaka denenmeli.
+- [ ] **`get_match_rating_averages` — OVR işleme.** Oy *gönderme* çalışıyor, ama 24 saatlik pencere kapanınca çalışan hesaplama henüz tetiklenmedi. İleri saatli gerçek maç gerekiyor; bugün test edilemez.
+- [ ] Bildirim tetikleyen bir işlem — ⚠️ `send-notification` edge function'ının **service role key** kullandığı VARSAYILDI, doğrulanmadı. Anon key kullanıyorsa bildirim yazma sessizce kırılır.
 
 Kırılırsa: Dashboard → SQL Editor → `supabase/rollback/rls_rollback.sql` yapıştır → Run. RLS kapanır, RPC'ler kalır, uygulama çalışır.
 
