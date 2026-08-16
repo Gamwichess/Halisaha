@@ -39,6 +39,29 @@ The `app/(tabs)/_layout.tsx` provides the tab shell, but the single tab renders 
 - `PlayerVoteScreen` uses Supabase Realtime (`postgres_changes`) to update vote counts live
 - `get_poll_summary` is a Supabase RPC function called to fetch aggregated vote counts
 
+### Row Level Security — READ THIS BEFORE TOUCHING THE DATABASE
+
+RLS is **ON** for all 12 app tables and storage (enabled 2026-08-16). This changes how features get added. Full architecture notes live in `DURUM.md` → "RLS Mimarisi".
+
+**Adding a new table** — a fresh table has RLS *off*, which means it is silently world-readable through the anon key embedded in the app binary. No error, no warning. Every new table needs, in the same migration:
+```sql
+alter table public.<name> enable row level security;
+revoke all on public.<name> from anon;
+-- + select/insert/update/delete policies
+```
+
+**Writing policies** — never `select` from `team_members` inside a policy. A policy on `team_members` that queries `team_members` causes **infinite recursion** and makes the table completely unreachable. Always use the `SECURITY DEFINER` helpers: `is_team_member(team_id)`, `is_team_manager(team_id)`. For poll-scoped tables use `poll_team_id(poll_id)`.
+
+**Adding a column to `profiles`** — `profiles` uses column-level grants (`push_token` and `pending_invite_code` are deliberately unreadable). A new column is **not** selectable until added to the `grant select (...)` list. Also: `select('*')` on `profiles` fails by design — always list columns explicitly.
+
+**Adding a column elsewhere** — table-level grants still apply, so no grant needed. But remember the fallback lesson: a query naming a column that doesn't exist in the DB yet fails *entirely* and silently empties a list (see `fetchUserTeams` in `DURUM.md`).
+
+**When a query needs data the user cannot yet see** (e.g. looking up a team before joining it), the answer is a `SECURITY DEFINER` RPC, not a looser policy — a loose policy lets anyone enumerate the table. Every such RPC needs `set search_path = public, pg_temp`, an internal membership check, `revoke ... from public, anon`, and `grant execute ... to authenticated`.
+
+**Applying migrations** — Claude cannot run `npx supabase db push` (no DB password). The user always applies them. Afterwards, verify anon is still locked out by hitting the REST API with the anon key: every table should return HTTP 401.
+
+**Emergency rollback** — `supabase/rollback/rls_rollback.sql`, deliberately kept *outside* `supabase/migrations/` so `db push` cannot apply it. Run it from the Supabase dashboard SQL editor. It disables RLS but leaves the RPCs in place, so the app keeps working.
+
 ### Poll/attendance system
 
 - Captain opens a poll via `handleOpenPoll()` → inserts into `polls` with `is_active: true`
