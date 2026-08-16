@@ -41,3 +41,9 @@ app-example
 # generated native folders
 /ios
 /android
+
+# build çıktıları — EAS'ten indirilen paketler repoya girmemeli (60+ MB)
+aab/
+*.aab
+*.apk
+*.ipa
