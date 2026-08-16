@@ -2,6 +2,13 @@
 
 > `/baslat` ile okunur, `/bitir` ile güncellenir. "Sonraya / Erken" bölümü = unutturma notları.
 
+## 🔴 ACİL (2026-08-17)
+
+- [ ] **iOS'a yeni build al — TestFlight'taki sürüm KIRIK.** iOS 1.0.7/#11 commit `34de6f4`'ten, yani RLS kod değişikliklerinden ÖNCE alınmış. Veritabanı kilitlendiği için o build'de `profiles.select('*')` → `permission denied`. Belirtiler: profil kaydederken hata (yazma yine de oluyor), Takımım'da oyuncu listesi eksik. Takım oluşturma / koda katılma / OVR işleme de kırık.
+  → Çözüm: `/guncelle` (1.0.8). Kodda düzeltme GEREKMİYOR, sadece güncel commit'ten build almak yeterli.
+  → **Android etkilenmedi** — #2 build'i `7bcd6ce`'ten, yani RLS işi bittikten sonra alındı. Play'e yüklenen paket doğru.
+- [ ] Yeni iOS build çıkınca TestFlight'ta profil kaydetme + Takımım listesi tekrar kontrol edilecek.
+
 ## Aktif (şu an üstünde çalışılan)
 
 > 📋 **Sıra `YOL_HARITASI.md`'de.** **Faz 0 ✅ · Faz 1.0 ✅ · Faz 1.1 ✅** → şu an **Faz 1.2**.

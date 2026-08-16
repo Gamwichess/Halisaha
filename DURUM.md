@@ -65,6 +65,9 @@ Migration'lar: `20260816120000_rls_helpers_and_rpcs.sql` (altyapı) + `202608161
 - **KARAR D2 — `player_ratings` KATI**, sadece kendi verdiğin oylar. Kimin kime kaç verdiği hassas ve gizlilik politikasında taahhüt edildi.
 - **Geri alma**: `supabase/rollback/rls_rollback.sql`. ⚠️ Bilerek `migrations/` klasörünün DIŞINDA — içinde olsaydı `db push` onu da uygulayıp RLS'i anında geri kapatırdı. Dashboard → SQL Editor'dan elle çalıştırılır. RPC'ler yerinde kalır, uygulama çalışmaya devam eder.
 - **⚠️ YENİ TABLO/KOLON EKLERKEN**: yeni tablo RLS'siz açılır ve sessizce herkese açık olur. Her yeni tabloda `enable row level security` + policy şart. Yeni kolonda ise "geri düşüş" dersini de hatırla (aşağıda Takım Kimliği notu).
+- **⚠️⚠️ SÜRÜM UYUŞMAZLIĞI — 2026-08-17'de yaşandı, ders çıkarıldı.** RLS'i sıkılaştırmak **daha önce yayınlanmış istemcileri kırar.** TestFlight'taki iOS 1.0.7/#11 build'i commit `34de6f4`'ten, yani RLS kod değişikliklerinden (`c6f74e8`) ÖNCE alınmıştı. Veritabanı kilitlenince o build'de `profiles.select('*')` → `permission denied for table profiles`; belirtiler: profil kaydederken hata (ama yazma başarılı, çünkü yazma izinleri verili), Takımım'da oyuncu listesinin eksilmesi. Android #2 build'i `7bcd6ce`'ten alındığı için etkilenmedi.
+  - **KURAL: Veritabanını sıkılaştıran bir migration uygulamadan ÖNCE, uyarlanmış kodu içeren build'in mağazalarda/TestFlight'ta olduğundan emin ol.** Sıra tersse eski sürümdeki tüm kullanıcılar kırılır ve geri alamazsın (kullanıcı güncellemeyi kendi yapar).
+  - Alternatif: geçiş dönemi için policy'yi geçici olarak gevşek tut, yeni sürüm yayıldıktan sonra sık.
 
 ## Yol Haritası Mimarisi (kalıcı notlar — YENİ)
 Sıralamanın gerekçeleri; `YOL_HARITASI.md` fazların kendisini tutar, buradakiler NEDEN öyle sıralandığı.
