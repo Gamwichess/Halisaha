@@ -27,8 +27,25 @@
 - **Takım kimliği ÇALIŞIYOR** (logo + isim + marka rengi; migration uygulandı, kullanıcı test etti — aşağıda mimari not)
 - **Tasarım sistemi KURULDU** — "Saha Gecesi" kimliği + `constants/theme.ts` token'ları (henüz hiçbir ekrana uygulanmadı; aşağıda mimari not)
 
-## Son Oturumda Yapılanlar (2026-08-16)
-Bu oturumda **koda neredeyse hiç dokunulmadı** — strateji, planlama ve tasarım altyapısı oturumuydu. Tek kod değişikliği `constants/theme.ts`.
+## Son Oturumda Yapılanlar (2026-08-16 / 17)
+Uzun bir oturum, üç bloktan oluştu: **(A)** strateji + planlama + tasarım kimliği, **(B)** RLS'in öne çekilip uygulanması, **(C)** Google Play dahili teste çıkış. Arayüz kodu hâlâ değişmedi — tasarım henüz hiçbir ekrana uygulanmadı.
+
+### C — Google Play + hata avı (2026-08-17)
+9. **Android paket adı `com.htapp.halisaha`** — `com.gamwi.halisaha` Play'de alınmıştı. iOS bundle DEĞİŞMEDİ (`com.gamwi.halisaha`); iki platformun farklı tanımlayıcı taşıması sorunsuz, ikisi de README'de.
+10. **Gereksiz `RECORD_AUDIO` izni kaldırıldı** — `app.json`'da iki kez yazılıydı, kodda ses kaydı yok. Play'de hassas izin olarak görünüp mağaza listelemesine "Ses kaydet" yazıyordu.
+11. **Gizlilik politikası yazıldı ve yayınlandı** — https://gamwichess.github.io/htapp-legal/ . İçerik gerçek kod davranışına göre: **cihaz konumu okunmuyor** (harita sadece kaptanın sahayı elle işaretlemesi için, konum izni istenmiyor), reklam/analitik yok, kamera-mikrofon yok. Misafir oyuncular üçüncü kişi verisi olduğu için ayrı bölümde. Kaynak `legal/gizlilik-politikasi.html`, yayın ayrı public repo `Gamwichess/htapp-legal` + GitHub Pages. ⚠️ Artifact URL'i kalıcı ev olarak SEÇİLMEDİ — Play bu adresi uygulamanın ömrü boyunca kontrol ediyor.
+12. **AAB alındı ve Play dahili teste yüklendi** (1.0.7/#2, commit `7bcd6ce`), testçi linki dağıtıldı. Keystore EAS'te bulutta üretildi.
+13. **iOS 1.0.8/#12** (`87179e5`) — 1.0.7/#11 RLS öncesi koddan alınmıştı, yenilendi.
+14. **Profil kaydetme hatası teşhis edildi ve düzeltildi** — `20260817120000_fix_profiles_update_grant.sql`. Kök neden aşağıda "upsert + kolon yetkisi tuzağı". ⏳ Kullanıcı doğrulaması bekliyor.
+15. **`.gitignore`** — indirilen `.aab` (61 MB) yanlışlıkla commit edilmişti; takipten çıkarıldı, `aab/`, `*.aab`, `*.apk`, `*.ipa` yok sayılıyor. ⚠️ Blob git geçmişinde kaldı, repo kalıcı ~61 MB şişti.
+16. **`CLAUDE.md`'ye RLS geliştirme kuralları eklendi** — her oturumda otomatik okunuyor.
+
+### B — RLS (2026-08-16 akşamı)
+- Yol haritasında Faz 6'daydı, **Play'e gerçek kullanıcı alınacağı için öne çekildi.** Veritabanı o ana kadar tamamen açıktı; anon key ile profiller ve push token'lar okunabiliyordu (canlı olarak gösterildi).
+- İki migration + 6 kod değişikliği + geri alma dosyası. 12 tablo + storage. Anon artık her tabloda HTTP 401.
+- Kullanıcı 9 yolu test etti, hepsi çalışıyor. Detay ve mimari kararlar aşağıda "RLS Mimarisi".
+
+### A — Strateji ve tasarım (2026-08-16)
 
 1. **Rakip analizi** — Kullanıcı `SS/referans/` altına **Altıpas v2.0.0**'ın 24 ekranını koydu; hepsi incelendi. Altıpas bir takım yönetim aracı DEĞİL, yerel futbol **pazaryeri/sosyal ağı** (Transfer Pazarı, Rakip Bul, Oyuncu Bul, Topluluklar, turnuvalar). Ölçek sinyali: Ankara'da 842 oyuncu, 101 rakip ilanı.
 2. **Karşılaştırmalı değerlendirme** — Biz algoritma derinliğinde (çeşitlilik, formasyon, OVR) öndeyiz; onlar ürün olgunluğu ve dağıtımda 2-3 tur önde (onboarding, i18n, Hesabı Sil, granular bildirim, boş durumlar, gerçek ikon seti). Tutma olasılığı tahmini: onboard olan takımda %60-70, organik yayılma %10-15 (ağ etkisi yok, yalnız kullanıcı için 1. gün değeri sıfır). **Stratejik karar: pazaryerini taklit ETME**, "en adil kadroyu kuran uygulama" konumlandırmasında derinleş.

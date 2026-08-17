@@ -63,6 +63,7 @@ Kırılırsa: Dashboard → SQL Editor → `supabase/rollback/rls_rollback.sql` 
 - [ ] **CLAUDE.md güncellemesi** — "tek dosya SPA" mimari notu, her ekran `screens/` altına çıktıkça güncellenmeli.
 
 ## Bilinen Buglar (takip et — durumları belirsiz, test edilecek)
+- [ ] **Play mağaza materyalleri** — üretime (halka açık yayın) çıkarken gerekecek, dahili testi engellemiyor: 512×512 simge, 1024×500 öne çıkan görsel, en az 2 telefon ekran görüntüsü, kısa (80 kr) + tam (4000 kr) açıklama, kategori. **Ekran görüntülerini Faz 2 arayüz yenilemesinden SONRA çek** — şimdi çekilirse birkaç hafta sonra hepsi yeniden çekilir. Açıklama metinleri tasarımdan bağımsız, istenirse şimdi yazılabilir.
 - [ ] **⏳ Otomatik maç-sonu oylama doğrulaması**: Otomatik bitiş düzeltmesi kodlandı ama geçmişe-dönük kurulan maçta tetiklenmiyor gibi. **İleri saatte gerçek bir maç** kurup, saati geçince oylamanın otomatik geldiğini doğrula. Test aşamasındaki arkadaşlardan feedback al. (Kod: `fetchActivePoll` zaman aşımı dalı + `onRefresh` home.)
 - [ ] **Yedek yerleştirme mevkiye göre yapılıyor mu** — hâlâ test edilmedi. Tek açık yerleştirme testi.
 - [ ] **`match_lineups`'a hiç `bench` satırı yazılmamış** — bu oturumda veri incelenirken fark edildi: 24 açıklanmış kadronun HEPSİ sadece `lineup='field'`, tek bir bench satırı yok. DURUM.md eskiden "field/bench yazılır" diyordu ama veri öyle demiyor. Yukarıdaki yedek yerleştirme maddesiyle ilgili olabilir — `saveLineupToSupabase`'e bakılacak.
@@ -98,6 +99,17 @@ Kırılırsa: Dashboard → SQL Editor → `supabase/rollback/rls_rollback.sql` 
 - [ ] **POSITION_WEIGHTS ince ayarı** — yeni 6'lı sisteme göre makul varsayılanlarla kuruldu (SECONDARY_WEIGHT_FACTOR=0.5 dahil). Gerçek kullanım oturunca gözden geçir.
 - [ ] **Kondisyon çarpan aralığı (~0.90–1.05) ve OVR sabiti K (0.18)** — gerçek oylama verisi gelince ayarla.
 - [ ] **Supabase pause**: free tier 7 günde bir duraklıyor. Haftada 1 manuel dashboard girişiyle idare. Launch'a yakın Pro'ya geçiş düşünülebilir.
+
+## Tamamlananlar (2026-08-17)
+- [x] **RLS AÇILDI ve test edildi** — Faz 6'daydı, Play'e gerçek kullanıcı alınacağı için öne çekildi. 12 tablo + storage, 2 migration + 6 kod değişikliği + geri alma dosyası. Anon her tabloda HTTP 401. Kullanıcı 9 yolu doğruladı. Mimari not DURUM.md'de.
+- [x] **`team_logos` storage policy'si daraltıldı** — "giriş yapmış herkes yazabilir" → "sadece o takımın yöneticisi kendi `teamId/` klasörüne".
+- [x] **Google Play dahili test** — paket `com.htapp.halisaha` (iOS'unki alınmıştı), AAB 1.0.7/#2 yüklendi, testçi linki dağıtıldı.
+- [x] **Gizlilik politikası yazıldı ve yayınlandı** — https://gamwichess.github.io/htapp-legal/ . Gerçek kod davranışına göre yazıldı (cihaz konumu toplanmıyor, reklam/analitik yok). Ayrı public repo + GitHub Pages, çünkü Play bu URL'i sürekli kontrol ediyor.
+- [x] **Gereksiz `RECORD_AUDIO` izni kaldırıldı** — iki kez yazılıydı, kodda karşılığı yoktu, mağaza listelemesinde "Ses kaydet" olarak görünüyordu.
+- [x] **iOS 1.0.8/#12** — 1.0.7/#11 RLS öncesi koddan alınmıştı, yenilendi.
+- [x] **Profil kaydetme hatası teşhis edildi** — `upsert` + kolon yetkisi tuzağı, `20260817120000_fix_profiles_update_grant.sql` (⏳ doğrulama bekliyor).
+- [x] **`.gitignore`'a build çıktıları** — 61 MB'lık `.aab` yanlışlıkla commit edilmişti.
+- [x] **`CLAUDE.md`'ye RLS geliştirme kuralları** — yeni tablo/kolon eklerken ne yapılacağı.
 
 ## Tamamlananlar (2026-08-16)
 - [x] **Rakip analizi — Altıpas v2.0.0** — 24 ekran incelendi (`SS/referans/`). Onlar pazaryeri/sosyal ağ, biz araç. Biz algoritma derinliğinde öndeyiz, onlar ürün olgunluğu + dağıtımda 2-3 tur önde. Tutma olasılığı: onboard takımda %60-70, organik %10-15.
