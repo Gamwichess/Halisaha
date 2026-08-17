@@ -2,12 +2,29 @@
 
 > `/baslat` ile okunur, `/bitir` ile güncellenir. "Sonraya / Erken" bölümü = unutturma notları.
 
-## 🔴 ACİL (2026-08-17)
+## ▶️ SONRAKİ OTURUMUN İLK İŞİ — Android bildirimleri (FCM)
 
-- [ ] **iOS'a yeni build al — TestFlight'taki sürüm KIRIK.** iOS 1.0.7/#11 commit `34de6f4`'ten, yani RLS kod değişikliklerinden ÖNCE alınmış. Veritabanı kilitlendiği için o build'de `profiles.select('*')` → `permission denied`. Belirtiler: profil kaydederken hata (yazma yine de oluyor), Takımım'da oyuncu listesi eksik. Takım oluşturma / koda katılma / OVR işleme de kırık.
-  → Çözüm: `/guncelle` (1.0.8). Kodda düzeltme GEREKMİYOR, sadece güncel commit'ten build almak yeterli.
-  → **Android etkilenmedi** — #2 build'i `7bcd6ce`'ten, yani RLS işi bittikten sonra alındı. Play'e yüklenen paket doğru.
-- [ ] Yeni iOS build çıkınca TestFlight'ta profil kaydetme + Takımım listesi tekrar kontrol edilecek.
+Android'de push bildirimi **hiç çalışmıyor**. Sebep: `expo-notifications` Android'de Firebase Cloud Messaging istiyor; projede `google-services.json` yok ve EAS'te FCM anahtarı tanımlı değil. `getExpoPushTokenAsync()` sessizce başarısız oluyor (try/catch içinde, çökmüyor), token alınamadığı için hiçbir bildirim gitmiyor. iOS etkilenmiyor, orada çalışıyor.
+
+Adımlar — 1, 2, 3 ve 5 kullanıcıda (tarayıcı), 4 ve 6 Claude'da:
+
+- [ ] **1.** [console.firebase.google.com](https://console.firebase.google.com) → yeni proje aç (Google Analytics gerekmiyor, atlanabilir)
+- [ ] **2.** Projeye **Android uygulaması** ekle → paket adı **tam olarak `com.htapp.halisaha`** (⚠️ yanlış yazılırsa bildirimler sessizce çalışmaz). SHA-1 istemez, boş bırakılır.
+- [ ] **3.** `google-services.json` dosyasını indir → proje kök dizinine koy
+- [ ] **4.** `app.json` → `android.googleServicesFile: "./google-services.json"` ekle *(Claude yapar)*
+      ⚠️ `.gitignore`'a da eklenmeli mi karar ver: dosya gizli anahtar içermez ama proje kimliğini açar. Repo private olduğu için commit'lenebilir.
+- [ ] **5.** Firebase → **Proje ayarları → Hizmet hesapları** → "Yeni özel anahtar oluştur" → inen JSON'u sakla
+- [ ] **6.** `eas credentials` → Android → FCM V1 → 5. adımdaki JSON'u yükle *(Claude komutu verir, kullanıcı çalıştırır)*
+- [ ] **7.** Yeni Android build + Play'e yükle — bildirimler ancak yeni pakette çalışır
+- [ ] **8.** Gerçek cihazda test: yoklama açıldığında bildirim geliyor mu
+
+⚠️ Ayrıca doğrulanmadı: `supabase/functions/send-notification` edge function'ının **service role key** kullandığı varsayıldı. Anon key kullanıyorsa RLS yüzünden `notifications` tablosuna yazamıyordur ve bildirim iOS'ta da kırıktır. Bu turda kontrol edilmeli.
+
+## 🔴 Açık hatalar (2026-08-17)
+
+- [ ] **⏳ Profil kaydetme — düzeltme yazıldı, DOĞRULANMADI.** `permission denied for table profiles`. Kök neden: istemci `upsert` kullanıyor, PostgREST bunu `ON CONFLICT DO UPDATE` yapıyor ve `id` kolonunu da SET listesine koyuyor; `id`ye UPDATE yetkisi verilmemişti. Migration `20260817120000_fix_profiles_update_grant.sql` yazıldı. **Uygulanıp test edilecek. Yeni build GEREKMİYOR, sadece `db push`.**
+- [ ] **⏳ Takımım'da kullanıcı kendini göremiyor.** Aynı kökten olabilir (profil satırı yazılamadığı için eksik). Yukarıdaki migration uygulandıktan sonra tekrar bakılacak; düzelmezse ayrı teşhis gerekir.
+- [x] ~~iOS build'i RLS öncesi koddan~~ — 1.0.8/#12 alındı (`87179e5`, RLS kodunu içeriyor). Ama **bu, profil hatasını çözmedi** — teşhis yanlıştı, gerçek sebep yukarıdaki kolon yetkisiydi.
 
 ## Aktif (şu an üstünde çalışılan)
 
